@@ -1,0 +1,49 @@
+---
+description: Use for any git action — status, commit, branch, merge, rebase, push, pull, reset, stash, or conflict recovery
+alwaysApply: false
+---
+
+# Git
+
+## Core
+
+- Stay in git scope. No repo-wide search/replace scripts. Small reviewable edits.
+- Unknown changes = other agent — continue in own scope. Task-scoped deletes ok; never delete/overwrite unknown or unrelated user data. Conflict/problem → stop + ask.
+- Consent required: branch change (or user-invoked workflow auth), amend, and destructive ops (`reset --hard`, `clean`, `restore`, force push / shared-history hard reset). Prefer `--force-with-lease` over bare `--force`.
+- Never force-push to `main`/`master`. Never update git config.
+- Recover: `rebase --abort` / `merge --abort` to back out of an in-flight op; `reflog` + `reset` when you need an earlier HEAD (consent for hard reset).
+- Hooks: commit/push may fail — fix the cause; don't skip (`--no-verify` / equivalent) unless the user explicitly asks.
+
+## Rebase & conflicts
+
+When the target has moved under a pushed feature branch: prefer `fetch` + `rebase` onto `origin/<target>` (not merge).
+
+1. On conflict: resolve intentionally — understand both sides. Lockfiles and generated files → regenerate via the project tool, don't hand-merge them. If the meaning is unclear → stop and ask. Then `git add` + `git rebase --continue` (repeat until done).
+2. When rebase succeeds: run relevant checks/tests, then `git push --force-with-lease` (consent already required). Never force-push the default branch.
+
+## Commits
+
+- Only commit when the user asks. One commit per logical change. Don't mix types in the same commit (e.g. `feat` + `refactor`).
+- Before commit: `git status`, staged+unstaged `git diff`, and recent `git log` (match message style).
+- Conventional Commits — `<type>(<optional scope>): <description>`. Types: `feat` new user-facing behavior; `fix` bug; `refactor` internal structure only; `perf` performance; `test` tests only; `docs` documentation only; `chore` tooling/deps; `ci`/`build` CI or build; `style` formatting only.
+- Summary ≤72 chars (aim ~50), imperative mood. Pass the message via HEREDOC (`git commit -m "$(cat <<'EOF' … EOF)"`).
+- Optional body after a blank line only when the *why* or a concrete second sentence adds real detail — wire/API/UI/test behavior reviewers care about, not file lists or vague “adjust tests”.
+- Breaking: `type(scope)!:` + `BREAKING CHANGE:` footer.
+- No `Co-authored-by:` for agent/tooling unless the user asks.
+- Amend only when the user asks (or a hook auto-modified files you must include), HEAD is yours and unpushed, and the commit succeeded. Failed/rejected hook → new commit, never amend.
+
+### Example
+
+```
+feat(api): add pagination to /users endpoint
+
+Returns page/limit query params. Default page size is 20.
+```
+
+### Example (body grounded in observable changes)
+
+```
+fix(api): surface HttpError.userMessage in AppError
+
+ErrorBoundary now receives the user-facing message from HttpError via AppError. Tests assert the loading state during fetch/refetch and mock errors as HttpError-shaped objects.
+```

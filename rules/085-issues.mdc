@@ -1,0 +1,59 @@
+---
+description: Use when creating or updating issues in Linear, Jira, GitLab, or another tracker — consent, body template, Definition of Done.
+alwaysApply: false
+---
+
+# Issues
+
+## Core
+
+- Create, update, or change status only when the user asks. Return the issue URL when done.
+- Use the tracker's real tools (Linear, Jira, GitLab, or equivalent). Never invent issue keys or URLs.
+- Tracker unclear → ask once. Do not assume Linear, Jira, or GitLab.
+- Team / project from the user or discover via tools — do not invent a default.
+- No secrets or sensitive information in issue text.
+- Definition of Done is team process, not issue body.
+- Definition of Done always: Acceptance Criteria met.
+- When that work happened: review merged; tests green.
+- When applicable (skip if N/A for this change): QA signed off; deploy/release path; docs/release notes.
+- Move tracker status to Done only on explicit user request, and only after applicable Definition of Done items hold.
+
+## Body
+
+**Full body** (create, or rewrite when Context / Task / AC are wrong or missing) — Context / Task / AC; omit empty Context. Never paste the guidance below into the ticket:
+
+```markdown
+## Context
+
+<2–4 short sentences: problem, current behavior, relevant paths. Omit this section when empty.>
+
+## Task
+
+<One clear sentence: what to do.>
+
+## Acceptance Criteria
+
+- <Yes/no checkable outcome>
+```
+
+**Patch** (title-only, comment, status, assignee, single AC tweak): do not rewrite the whole description. Leave existing sections as-is unless the user asked to change them.
+
+- Title short and in line with the Task. If the ask mixes types, pick the closest one.
+- Turn vague requests into the template before saving.
+- Vague or missing AC on pickup → ask or propose AC before coding. When the work is done → ask the user before marking the issue Done.
+
+### Task types
+
+Choose the closest type from what the user described — do not wait for them to name it. If two types fit equally well, ask once. One ask per issue.
+
+- **Feature / enhancement** — New capability, improvement (UX, API, ergonomics), or a measured performance win. AC for the main behavior; a before/after check when you can measure perf. Example: `Let users export the reports list as CSV.`
+- **Bug** — What breaks, current vs expected; note repro if any. Add a test in AC when it helps catch the bug again. Example: `Stop the detail view from crashing when it opens without an id.`
+- **Refactor** — Internal structure only — no intentional behavior change. AC: behavior unchanged + any guardrail tests. Example: `Share the data-access logic in one place instead of copying it.`
+- **Chore / CI** — Tooling, deps, config, pipelines, or build. AC: install, lint, build, or green CI. Example: `Fail the pipeline when typecheck finds new errors.`
+- **Docs / test** — Documentation or tests only. AC: named docs updated, or named suites/cases pass in CI. Example: `Cover the missing-id detail-view crash with a test.`
+
+### Acceptance Criteria quality
+
+Short list of how you know the Task is finished. Not how to build it. A few bullets someone else can check yes/no. Say what is true when it is done — not “works well”. Too much for one issue → split.
+
+Examples: `README is updated with the latest changes.` / `The reports list can be exported as CSV.` / `The detail view does not crash when opened without an id.`

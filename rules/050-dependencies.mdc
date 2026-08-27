@@ -1,0 +1,42 @@
+---
+description: Use when adding, upgrading, removing, or installing packages, or when choosing how to run JS/TS scripts (pnpm / npm / yarn / bun) — detect the manager from the current package then the repo root; prefer existing stack; ask before new dependencies; monorepo workspace filters (Turbo, Nx, pnpm --filter)
+alwaysApply: false
+---
+
+# Dependencies
+
+## Core
+
+- Prefer packages already used in the project. Don't add a dependency for something the stack already covers.
+- Ask before adding a new dependency unless the user clearly requested it or it's the obvious project-standard choice.
+- Pin/install via the project's normal package manager and lockfile — no ad-hoc global installs.
+- Commit the lockfile together with the manifest change — no install-only / local-only deps.
+- Upgrades: minimal bump (patch/minor). Major only with explicit user OK and a short note on breaking changes.
+
+## Package manager
+
+Detect once per task from the package that owns the files you’re changing (nearest `package.json`). If that directory has no signal, use the repo root. Reuse that same runner for install, exec, test, lint, and codegen — don’t switch mid-task.
+
+Signals in that directory, first match:
+
+- `package.json` `"packageManager"` (Corepack) wins
+- lockfile: `pnpm-lock.yaml` → pnpm; `bun.lock` / `bun.lockb` → bun; `yarn.lock` → yarn; `package-lock.json` → npm
+
+Invoke only with that manager — never `npx` in a pnpm/yarn/bun repo, never `bun` in a pnpm/npm repo:
+
+| Manager | Script | Local bin | One-off |
+| --- | --- | --- | --- |
+| pnpm | `pnpm <script>` | `pnpm exec` | `pnpm dlx` |
+| bun | `bun run <script>` | `bunx` | `bunx` |
+| yarn | `yarn <script>` | `yarn exec` | `yarn dlx` |
+| npm | `npm run <script>` | `npx` | `npx` |
+
+Prefer `package.json` scripts over invoking Vitest/Prisma/the CLI by name. In a monorepo, scope the run with the repo’s existing task runner (Turbo `--filter`, Nx `-p` / `nx run`, pnpm/yarn `--filter` / `workspace`) — don’t invent a runner or a task name the repo doesn’t already have.
+
+## Monorepo
+
+- If workspaces or a root task-runner config exist, each workspace package owns its `package.json`; install/bump there via the repo’s package filter — not ad-hoc at root. Run that package’s scripts from the package (or that filter), not a guessed root command.
+- Need another package in the monorepo? Declare it on the consumer with the repo's workspace protocol (e.g. `api` → `packages/*` via `workspace:*`).
+- Root deps only for root tooling.
+- Match existing catalog/overrides/version policy; don't invent a second one.
+- Task runner: use existing pipelines + the repo’s package filter for the affected package (and dependents); don't invent tasks or run everything by default.

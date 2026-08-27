@@ -1,0 +1,20 @@
+---
+description: Use when reviewing a diff, MR, or change set — treat it as untrusted until checked for correctness, risk, and scope; post-land recap
+alwaysApply: false
+---
+
+# Review
+
+## Core
+
+- Treat the diff as untrusted until reviewed. Improve before land; full rewrite OK when cleaner.
+- Lead with findings by severity (blocker → risk → nit). Skip empty praise; say what's solid only when it changes the decision.
+- Check correctness, edge cases, error paths, authorization and secrets, missing tests, and extra work beyond the ask — not only style.
+- Prefer concrete fixes or questions over vague “consider …” comments.
+- Don't approve mentally what you wouldn't ship: if CI, tests, or security are weak, call that out as a blocker.
+- If the MR UI says rebase needed or shows conflicts → `fetch` + `rebase` onto `origin/<target>` (not merge) before calling it ready.
+- No land without a real review pass.
+
+## After land
+
+- Short narrative recap — problem, root cause, what changed and why, proof — not a bare checklist/SHAs.

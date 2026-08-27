@@ -1,0 +1,50 @@
+---
+description: Use when writing, editing, reviewing, or refactoring code — immutability, structure, safe refactors, errors, lint/format, complete runnable code
+globs: "**/*.{ts,tsx,js,jsx,mjs,cjs,py,go}"
+alwaysApply: false
+---
+
+# Code
+
+## Core
+
+Applies when writing, editing, reviewing, or refactoring code.
+
+## Structure
+
+- Prefer immutable updates (return new objects/copies). Mutate only when the language/API or a measured hot path requires it — keep that change local and obvious.
+- Prefer flat **role folders** under `src/*` (`components/`, `services/`, `pages/` / `screens/`, …) — not deep feature/domain trees. Many small files; typical 200–400 lines, max 800. Match the repo’s role names if they already differ; don’t invent unused role folders.
+- Keep units of work small and nesting shallow. Prefer clear names; avoid hardcoded magic values.
+- Match existing style in the file/repo — imports, naming, patterns. If patterns are poor, follow best practices (don’t copy bad structure). Whitespace/quotes/semicolons → Lint / format; never “improve” format by taste.
+
+## Lint / format
+
+- **Detect first:** find the real toolchain from configs + manifests/scripts for the stack in play — e.g. `package.json` / Biome / ESLint / Prettier / dprint; `pyproject.toml` / Ruff; `golangci-lint` — don’t assume ESLint/Prettier. Mirror what’s present.
+- **Compliance:** follow the existing config — it wins over personal preference. Never introduce a second/competing tool (e.g. don’t add Prettier to a Biome repo).
+- **No tooling → ask:** if lint/format isn’t set up, don’t add it on your own — offer to help configure it, but only proceed after the user agrees.
+- **Auto-fix first:** for lint/format issues, run the project’s lint/format scripts (or the repo’s usual task runner) before hand-fixing. Prefer project scripts over invoking binaries ad hoc.
+- **Fix root:** resolve remaining errors at the cause. Don’t add suppression comments (`eslint-disable`, `biome-ignore`, `# noqa`, `//nolint`, `@ts-ignore` / `@ts-expect-error`, …) unless the user allows it — ask first if a suppression seems necessary.
+- Align new/changed code with the active formatter config.
+- Run lint/format on changed code before claiming done; report outcomes honestly. Fix what you introduced; touch pre-existing lint in the same files only when trivial and the diff stays reviewable — otherwise leave or note it.
+- Don’t mix formatter-only or lint-only changes with behavior changes (see Refactor).
+
+## Refactor
+
+- Structure without behavior change — no features or fixes smuggled into the same pass. Keep the public API stable unless the user asked for a breaking change.
+- Prefer small steps (extract → rename → move); keep tests passing between steps when practical. Lock current behavior with tests or a reproduction before large moves.
+- No new abstractions “while cleaning up” — extract/rename/move only; don't invent a new pattern under a refactor label.
+- Keep the diff reviewable — no mixed formatting, taste renames, or unrelated cleanup. Make it easy to see behavior is unchanged.
+- If the refactor is uncertain (it touches a lot of other code, behavior is unclear, tests are thin, or it might break callers), stop and ask the user before proceeding.
+
+## Errors
+
+- Never swallow errors. Map/handle at the right boundary — not in every layer.
+- UI: user-friendly messages. Server: log detailed context; clients get safe messages.
+- Fail fast with clear messages at system boundaries.
+
+## Output
+
+- Complete, runnable code only. No `// TODO`, no `// ...rest`.
+- Preserve unmodified code and comments.
+- If truncation is unavoidable, warn in **BOLD** at the top.
+- Cite existing code as `start:end:path` fenced citations. Use real project/stdlib deps only.
