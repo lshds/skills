@@ -1,0 +1,81 @@
+---
+description: Use when creating, updating, or landing a merge request — title, body templates, branch, push, platform tools
+alwaysApply: false
+---
+
+# Merge requests
+
+## Core
+
+- Only create an MR when the user asks. Return the URL when done.
+- Use the host’s real tools for MRs (`gh` for GitHub, or the project’s GitLab tooling).
+- Land only after a real review pass. If the target moved, rebase onto it — not merge.
+- Hotfix / critical production bug → Hotfix body; title stays `fix(…)`. Everything else → Default.
+
+## Title
+
+Format: `type(scope): short imperative summary` (scope optional).
+
+- `feat` — new user-facing behavior (default for product work)
+- `fix` — bug fixes (including hotfixes)
+- `test` — tests only
+- `chore` — tooling/deps/housekeeping
+- `docs` — documentation only
+- `refactor` — internal structure, no behavior change
+- `perf` — performance
+- `ci` / `build` — CI or build system
+
+Examples: `fix(api): resolve location permission race`, `chore(eslint): bump flat config`.
+
+- Pick the dominant type on the branch. Mixed work → primary user-facing intent.
+
+## Body
+
+Fill each section with real content; omit a section only when it would be empty. No commit-message paste. Pass the body via HEREDOC.
+
+### Default
+
+```markdown
+### Description
+Describe the problem or user story this merge request addresses.
+
+### Changes Made
+Provide code snippets or screenshots as needed.
+
+### Related Issues
+Provide links to the related issues or feature requests.
+
+### Additional Notes
+Include any extra information or considerations for reviewers, such as impacted areas of the codebase.
+```
+
+### Hotfix
+
+```markdown
+### Issue
+Provide a link to the original issue or bug report.
+
+### Problem
+Describe the critical issue or bug being addressed.
+
+### Solution
+Explain the fix or solution implemented.
+
+### Changes Made
+Provide code snippets or screenshots as needed.
+
+### Additional Notes
+Include any extra information or considerations for reviewers, such as impacted areas of the codebase.
+```
+
+## Create
+
+- Branch name when creating one: `type/kebab-slug` (e.g. `fix/location-permission-race`, `chore/bump-eslint-flat-config`).
+- Before create: `status`, full diff vs base, and commit log since divergence — cover **all** commits on the branch, not only the latest.
+- Push with `-u` if the branch has no upstream.
+- UI MRs: before/after images when the change is visual (skip with a short reason if not feasible).
+- Sanitize captures and attachments before upload. If unsafe → state blocker; never upload.
+
+## Land
+
+- After land: checkout default branch, `pull --ff-only`, verify clean `status -sb`.

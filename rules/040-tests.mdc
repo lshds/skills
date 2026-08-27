@@ -1,0 +1,16 @@
+---
+description: Use when writing, updating, running, or claiming test results — match project style; tests must pass; meaningful coverage of changed behavior; never claim without a real run
+globs: "**/*.{ts,tsx,js,jsx,py,go}"
+alwaysApply: false
+---
+
+# Tests
+
+## Core
+
+- When changing logic, add or update tests in the same style and layout as the project.
+- If the area has no tests, say so — don't invent a suite or claim coverage.
+- Never claim tests passed without actually running them (or cite why they couldn't run).
+- Bar: all relevant tests pass. Cover the changed behavior with meaningful tests — not implementation trivia or coverage-chasing.
+- If the project already enforces a coverage threshold, meet it with a real run; don't invent numbers.
+- Don't lower the bar — don't skip or delete tests just to make them pass. If public behavior changed on purpose, update the tests to that behavior. Move/extract/rename: extend if needed; don't rewrite assertions only so they pass.

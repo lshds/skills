@@ -1,0 +1,15 @@
+---
+description: Use when investigating bugs, failures, regressions, or unexpected behavior — evidence first, then a minimal fix
+alwaysApply: false
+---
+
+# Debug
+
+## Core
+
+- Reproduce (or gather equivalent evidence) before changing code. Don't guess with many unrelated edits.
+- Prefer runtime proof: logs, stack traces, failing tests, bisect, bisected commits — over guesses.
+- Screenshot / live-UI bugs: capture the live page (snapshot and/or screenshot) when available; don't guess from description alone.
+- Find the root cause, then apply the smallest correct fix. Don't hide the bug with retries or catch-alls unless that is the real fix.
+- Stay in scope: fix the bug you were asked to fix; park unrelated issues as follow-ups.
+- Say what is known, what changed the diagnosis, and what remains uncertain. If you can't repro, say so and stop guessing.

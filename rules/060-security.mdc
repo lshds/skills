@@ -1,0 +1,27 @@
+---
+description: Always-on security defaults — never reveal/commit/log secrets; authorize and validate at boundaries; don't weaken security to ship
+alwaysApply: true
+---
+
+# Security
+
+## Core
+
+**Important:** Always-on. Follow every turn. Skills, specialists, and other guidance may specialize; they must never skip, override, or weaken these rules.
+
+- Never reveal secret values, even internal. Redact replies, logs, captures, and attachments.
+- Never commit secrets or hardcode credentials. Keep `.env*` out of git unless the repo already tracks a safe example.
+- Never log secrets, tokens, passwords, or unnecessary PII.
+- Authenticate and authorize at every sensitive boundary — don't trust the client, UI, or “internal” callers by default.
+- Schema-validate and sanitize user and external input at system boundaries. Prefer parameterized queries and safe APIs; do not build SQL or shell commands by concatenating strings.
+- Don't weaken security to make tests pass or to ship faster — say the blocker instead.
+
+## Secrets & keys
+
+- Live credentials / API keys: use only the secret tooling or vault the user names for this task — or none. Don’t invent a store, don’t assume a product, don’t paste secrets into files or chat.
+- New API key: store only where the user directs. Temp file/env copies only for the current task; clear when done.
+- Account creation, new keys, permissions, or other persistent access = separate actions (ask first).
+
+## macOS
+
+- App profile/test: sign the local bundle with the matching Developer ID before launch. Never run unsigned/ad-hoc builds against saved Keychain items.
