@@ -59,6 +59,47 @@ return {
 }
 ```
 
+## `if` or `return`, not `continue`
+
+`continue` hides the work behind a jump. Skip an iteration with a matching `if`, or extract the body and use early `return`. Prefer early `return` when the body has a guard plus more than one step.
+
+```typescript
+// ❌ Incorrect: continue skips the rest of the iteration — the work sits after an implicit jump
+for (const hour of hours) {
+  const level = levelForHour(hour)
+
+  if (!level) {
+    continue
+  }
+
+  peak = strongerLevel(peak, level)
+}
+
+// ✅ Correct: one-step body sits in the matching `if`
+for (const hour of hours) {
+  const level = levelForHour(hour)
+
+  if (level) {
+    peak = strongerLevel(peak, level)
+  }
+}
+
+// ✅ Correct: multi-step body uses early `return`
+function nextPeak(peak: Level | undefined, hour: Hour): Level | undefined {
+  const level = levelForHour(hour)
+
+  if (!level) {
+    return peak
+  }
+
+  return strongerLevel(peak, level)
+}
+
+for (const hour of hours) {
+  peak = nextPeak(peak, hour)
+}
+```
+
 ## `??` over `||`
 
 Nullish coalescing preserves valid falsy values like `0`, `''`, and `false`.
