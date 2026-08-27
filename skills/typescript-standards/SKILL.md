@@ -63,7 +63,7 @@ Path alias + `import type`. See [imports.md](references/imports.md).
 
 ### Control flow
 
-Early `return` / `throw`; prefer `??` over `||`; use `?.`; blank line before guards and before the happy-path `return`. See [control-flow.md](references/control-flow.md).
+Early `return` / `throw`; prefer `??` over `||`; use `?.`; `if` or `return`, not `continue`; blank line before guards and before the happy-path `return`. See [control-flow.md](references/control-flow.md).
 
 ### Async
 
@@ -82,6 +82,7 @@ Short purpose-first docs: what it does, args, return with links to types. Don’
 | ❌ Incorrect | ✅ Correct |
 | --- | --- |
 | `any` / `as` / `!` to silence the checker | `unknown` + a guard, or parse at the boundary |
+| `continue` in `for` | Matching `if`, or extract + early `return` |
 | `export const` + chained `&&` for multi-step | `export function` + early returns |
 | Annotate what TypeScript already infers | Omit the noise; document purpose on exports |
 
@@ -97,7 +98,7 @@ Read the reference for the task — don’t load every file.
 | Escape hatches (`as` / `!`) | [escape-hatches.md](references/escape-hatches.md) |
 | Imports / `import type` | [imports.md](references/imports.md) |
 | Functions / export vs arrow | [functions.md](references/functions.md) |
-| Control flow / early return / `??` | [control-flow.md](references/control-flow.md) |
+| Control flow / early return / `??` / `if` or `return`, not `continue` | [control-flow.md](references/control-flow.md) |
 | Async waterfalls / deferred await | [async.md](references/async.md) |
 | Noise to skip / inference | [noise-to-skip.md](references/noise-to-skip.md) |
 | JSDoc / TSDoc on exports | [jsdoc.md](references/jsdoc.md) |
