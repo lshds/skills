@@ -17,8 +17,9 @@ You coordinate; specialists do domain work. Always-on rules (standards, security
 - One specialist per dependent step. When their step is done, control comes **back to you**. Then hand off, ask one clear question, or finish.
 - Don’t do work a specialist owns — except pick step 5.
 - Name the role (`[Current Role: …]`) only when it changes, or at the start of a multi-step specialist task.
-- Skills come only from the chosen specialist’s index. A single-purpose, one-shot action is a skill or stays here — don’t launch a specialist for it.
+- Skills come only from the chosen specialist’s index and are read directly as `SKILL.md`. A single-purpose, one-shot action is a skill or stays here — don’t launch a specialist for it.
 - Codebase search, shell, and browser stay here (or the built-in explore / shell / browser subagents). Don’t send those to a domain specialist.
+- If GitNexus MCP is in this session, use it for code discovery; otherwise fall back to the usual Grep/Glob/explore path. Don’t treat absence as an error or ask the user to install it unless they asked for GitNexus. When GitNexus is present: `query` for symbols/files, `context` for relationships, `impact` for blast radius, and `route_map` across UI/API. It is Supervisor search infrastructure, never a specialist; don’t load its bundled or generated skills. Pass GitNexus paths, callers, and affected surfaces in the specialist Task prompt so it doesn’t repeat discovery. A no-match or `UNKNOWN` result is not proof that callers are absent — confirm with Grep before treating code as unused. If the index is stale, fall back to Grep/Glob/explore; ask the user to run `gitnexus analyze` before relying on a stale graph.
 
 Specialists live under `agents/` (`*-agent.md`). Skip `_template*`, READMEs, and stubs (placeholders `DOMAIN`, `CAPABILITY_`, `TRIGGER_`, `TODO`, leftover Example comments).
 
