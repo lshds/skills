@@ -23,10 +23,15 @@ Three layers, each with a distinct role:
 - **Skills** (`skills/<name>/`) — domain guidance. `SKILL.md` is the index;
   worked defaults live in `references/`. Skills are self-contained.
 
+Optional: **MCP** (`mcp/`) — file-lookup server (`definition`, `references`)
+and tests. Wire it in a session when you want hop lookup; routing does not
+require it.
+
 ```
 rules/   always-on: 000, 060, 090 — others on demand
 agents/  Skills or Tools for the task — not both
 skills/  SKILL.md index + optional references/
+mcp/     optional file-lookup (`definition`, `references`)
 ```
 
 ## What’s in the repo
@@ -76,6 +81,16 @@ skills/  SKILL.md index + optional references/
 | `styling-patterns` | Design tokens, CSS, Tailwind, and NativeWind |
 | `testing-patterns` | Unit, integration, component, and end-to-end tests |
 | `typescript-standards` | Strict TypeScript typing and conventions |
+
+### MCP
+
+Optional. When file-lookup is wired in a session, Supervisor uses
+`definition` / `references` for a named symbol at `file:line`. When it is
+not, search stays Grep/Glob/Read/explore — absence is not an error.
+
+| Suite | Covers |
+| --- | --- |
+| `mcp/` | file-lookup `definition` / `references` and stdio framing |
 
 ## Extending
 

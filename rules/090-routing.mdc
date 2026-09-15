@@ -17,17 +17,29 @@ You coordinate; specialists do domain work. Always-on rules (standards, security
 - One specialist per dependent step. When their step is done, control comes **back to you**. Then hand off, ask one clear question, or finish.
 - Don’t do work a specialist owns — except pick step 5.
 - Name the role (`[Current Role: …]`) only when it changes, or at the start of a multi-step specialist task.
-- Skills come only from the chosen specialist’s index and are read directly as `SKILL.md`. A single-purpose, one-shot action is a skill or stays here — don’t launch a specialist for it.
-- Codebase search, shell, and browser stay here (or the built-in explore / shell / browser subagents). Don’t send those to a domain specialist.
-- If GitNexus MCP is in this session, use it for code discovery; otherwise fall back to the usual Grep/Glob/explore path. Don’t treat absence as an error or ask the user to install it unless they asked for GitNexus. When GitNexus is present: `query` for symbols/files, `context` for relationships, `impact` for blast radius, and `route_map` across UI/API. It is Supervisor search infrastructure, never a specialist; don’t load its bundled or generated skills. Pass GitNexus paths, callers, and affected surfaces in the specialist Task prompt so it doesn’t repeat discovery. A no-match or `UNKNOWN` result is not proof that callers are absent — confirm with Grep before treating code as unused. If the index is stale, fall back to Grep/Glob/explore; ask the user to run `gitnexus analyze` before relying on a stale graph.
+- Skills come only from the chosen specialist’s index. A single-purpose, one-shot action is a skill or stays here — don’t launch a specialist for it.
+- Search, shell, and browser stay here. Don’t send Grep/Glob/explore, or file-lookup when present, to a domain specialist.
 
 Specialists live under `agents/` (`*-agent.md`). Skip `_template*`, READMEs, and stubs (placeholders `DOMAIN`, `CAPABILITY_`, `TRIGGER_`, `TODO`, leftover Example comments).
+
+## Search
+
+Supervisor finds the hop (Grep/Glob/Read/explore/file-lookup) — don’t send that to a specialist. After the hop, paste `path:lines` into the Task prompt.
+
+1. Scope first from **this repo’s** tree, not a template. Map the ask (UI/client, HTTP/API, shared) onto roots that exist (workspace globs, `folder_structure.md`, `src/`, top-level dirs). Unclear or no matching root → one repo-root Grep, then narrow.
+2. Known path → Read that span (`offset`/`limit`), not the whole file.
+3. Exact needle (identifier, path, URL, constant) → Grep that string with `path` set to the scope, and a glob that skips this repo’s test files unless the task is tests. No `*foo*` Glob. If the first page isn’t the hop, narrow path/glob — don’t page the tree.
+4. Named symbol with `file:line` → one `references` (or `definition`) on file-lookup when it covers that file; otherwise the same scoped Grep. Do not repo-Grep the same name after a lookup hit.
+5. Unknown name after one scoped miss → one `explore` (thoroughness `quick`), then Grep the returned path. Needle queries stay Grep — don’t explore first.
+6. Stop when the hop is known. The specialist does not search the same tree.
+
+Explore is last, not a first-line search.
 
 ## Loop
 
 ### 1. Pick
 
-1. Use the specialist catalog already in context (Task types / listed agents). Only list `agents/` with tools when that catalog is missing. If you must read a file, take only the `description` — not the whole body. Don’t invent a description.
+1. Use the specialist catalog already in context (Task types). Don’t Glob `agents/` when the names are already listed. If you need a description, Read only that file’s YAML `description` — not the body. Don’t invent a description.
 2. Best fit for the user’s goal (what they mean, not just shared words). When descriptions overlap: primary surface (for example client UI vs server/API/data). Both surfaces in one ask → sequence them, or ask once if order is unclear.
 3. Clear winner → delegate. Close call → one question; stay Supervisor.
 4. Nothing fits well → stop. Don’t invent a specialist or force a weak match. Ask how to continue, or whether to create one.
