@@ -24,7 +24,7 @@ The HTML `<redoc>` tag reads kebab-case attributes. `Redoc.init` and `redocly.ya
 
 ```typescript
 const container = document.getElementById('redoc')
-if (container === null) {
+if (!container) {
   throw new Error('Missing #redoc')
 }
 

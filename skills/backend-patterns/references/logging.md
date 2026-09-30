@@ -27,11 +27,13 @@ export async function completeCheckout(
 ): Promise<Order> {
   const startedAt = Date.now()
   const order = await saveOrder(checkout)
+
   logger.info({
     event: 'order_created',
     orderId: order.id,
     durationMs: Date.now() - startedAt,
   })
+
   return order
 }
 ```
@@ -49,7 +51,8 @@ export async function loadCatalog(
   catalogId: string,
 ): Promise<Catalog> {
   const cachedCatalog = await readCatalogCache(catalogId)
-  if (cachedCatalog !== undefined) {
+
+  if (cachedCatalog) {
     logger.warn({ event: 'catalog_cache_hit', catalogId })
     return cachedCatalog
   }
@@ -65,13 +68,16 @@ export async function loadCatalog(
   catalogId: string,
 ): Promise<Catalog> {
   const cachedCatalog = await readCatalogCache(catalogId)
-  if (cachedCatalog !== undefined) {
+
+  if (cachedCatalog) {
     logger.info({ event: 'catalog_cache_hit', catalogId })
     return cachedCatalog
   }
 
   const catalog = await fetchCatalog(catalogId)
+
   logger.warn({ event: 'catalog_cache_miss', catalogId })
+
   return catalog
 }
 ```
@@ -85,9 +91,10 @@ export async function createOrder(
   orderInput: CreateOrderInput,
 ): Promise<Order | undefined> {
   const order = await saveOrder(orderInput)
-  if (order === undefined) {
+
+  if (!order) {
     logger.debug({ event: 'order_create_failed' })
-    return undefined
+    return
   }
 
   logger.error({ event: 'order_created', orderId: order.id })
@@ -102,12 +109,14 @@ export async function createOrder(
   logger.debug({ event: 'order_create_start', skuCount: orderInput.items.length })
 
   const order = await saveOrder(orderInput)
-  if (order === undefined) {
+
+  if (!order) {
     logger.error({ event: 'order_create_failed' })
-    return undefined
+    return
   }
 
   logger.info({ event: 'order_created', orderId: order.id })
+
   return order
 }
 ```
@@ -136,7 +145,9 @@ export async function createOrder(
 ): Promise<Order> {
   const requestLogger = logger.child({ requestId })
   const order = await saveOrder(orderInput)
+
   requestLogger.info({ event: 'order_created', orderId: order.id })
+
   return order
 }
 ```
@@ -164,7 +175,9 @@ export async function createOrder(
   orderInput: CreateOrderInput,
 ): Promise<Order> {
   const order = await saveOrder(orderInput)
+
   logger.info({ event: 'order_created', orderId: order.id })
+
   return order
 }
 ```

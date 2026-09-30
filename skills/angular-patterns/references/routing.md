@@ -74,7 +74,7 @@ readonly parsedUserId = computed(() => {
   const parsedValue = Number(this.id())
 
   if (Number.isNaN(parsedValue)) {
-    return undefined
+    return
   }
 
   return parsedValue
@@ -160,7 +160,7 @@ params that change while the page stays open, read `input()` from
 // ❌ Incorrect: subscribe in ngOnInit (neither resolver nor httpResource)
 ngOnInit() {
   const userId = this.activatedRoute.snapshot.paramMap.get('id')
-  if (userId === null) {
+  if (!userId) {
     return
   }
   this.userApi.fetchUserById(userId).subscribe((user) => {
@@ -194,7 +194,7 @@ export function readResolvedUserName(
 export const userResolver: ResolveFn<User> = (activatedRoute) => {
   const userId = activatedRoute.paramMap.get('id')
 
-  if (userId === null) {
+  if (!userId) {
     return inject(Router).createUrlTree(['/users'])
   }
 

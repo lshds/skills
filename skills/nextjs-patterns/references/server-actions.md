@@ -15,7 +15,7 @@ Layouts and proxy do not run for every action call. Read the session (repo
 export async function createPost(formData: FormData) {
   const postTitle = readPostTitleFromForm(formData)
 
-  if (postTitle === undefined) {
+  if (!postTitle) {
     return { kind: 'error', message: 'Title is required' }
   }
 
@@ -33,13 +33,13 @@ export async function createPost(formData: FormData) {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     redirect('/sign-in')
   }
 
   const postTitle = readPostTitleFromForm(formData)
 
-  if (postTitle === undefined) {
+  if (!postTitle) {
     return { kind: 'error', message: 'Title is required' }
   }
 
@@ -100,7 +100,7 @@ export async function addToCart(productId: string): Promise<AddToCartResult> {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     redirect('/sign-in')
   }
 
@@ -157,10 +157,7 @@ export async function deleteProject(
     where: { id: projectId },
   })
 
-  const canDeleteProject =
-    project !== null && project.ownerId === session.userId
-
-  if (!canDeleteProject) {
+  if (!project || project.ownerId !== session.userId) {
     return { kind: 'error', message: 'You cannot delete this project' }
   }
 

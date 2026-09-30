@@ -16,7 +16,7 @@ export async function signAccessToken(userId: string): Promise<string> {
 }
 
 // ✅ Correct: checked when the module is first evaluated
-type Environment = {
+interface Environment {
   jwtSecret: string
   databaseUrl: string
 }
@@ -25,11 +25,11 @@ function parseEnvironment(): Environment {
   const jwtSecret = process.env.JWT_SECRET
   const databaseUrl = process.env.DATABASE_URL
 
-  if (jwtSecret === undefined || jwtSecret === '') {
+  if (!jwtSecret) {
     throw new Error('JWT_SECRET is required')
   }
 
-  if (databaseUrl === undefined || databaseUrl === '') {
+  if (!databaseUrl) {
     throw new Error('DATABASE_URL is required')
   }
 
@@ -58,7 +58,7 @@ export function loadDatabaseUrl(): string {
 }
 
 // ✅ Correct: object with required string fields; throw if a value is absent
-type Environment = {
+interface Environment {
   jwtSecret: string
   databaseUrl: string
 }
@@ -67,11 +67,11 @@ function parseEnvironment(): Environment {
   const jwtSecret = process.env.JWT_SECRET
   const databaseUrl = process.env.DATABASE_URL
 
-  if (typeof jwtSecret !== 'string' || jwtSecret.length === 0) {
+  if (!jwtSecret) {
     throw new Error('JWT_SECRET is required')
   }
 
-  if (typeof databaseUrl !== 'string' || databaseUrl.length === 0) {
+  if (!databaseUrl) {
     throw new Error('DATABASE_URL is required')
   }
 

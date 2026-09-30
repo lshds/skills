@@ -2,7 +2,8 @@
 
 Prefer Server Components for data, secrets, and first paint over
 `'use client'` on the page, so the browser only loads the leaves that need
-hooks or events.
+hooks or events. Server code calls data functions directly and guards its
+modules with `server-only`.
 
 ## Default to the server
 
@@ -89,7 +90,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const product = await fetchProductById(productId)
 
-  if (product === null) {
+  if (!product) {
     notFound()
   }
 
@@ -146,11 +147,78 @@ import { cookies } from 'next/headers'
 export default async function AccountPage() {
   const cookieStore = await cookies()
 
-  const isSignedIn = cookieStore.get('session') !== undefined
+  const isSignedIn = cookieStore.has('session')
 
   return <p>{isSignedIn ? 'Signed in' : 'Signed out'}</p>
 }
 ```
+
+## Call the data function, not your own Route Handler
+
+A Server Component already runs on the server. Fetching your own
+`/api/...` adds an HTTP round trip, needs an absolute URL per environment, and
+drops the typed return value.
+
+```tsx
+// ❌ Incorrect: Server Component calls its own Route Handler over HTTP
+export default async function ProductsPage() {
+  const response = await fetch(`${process.env.APP_URL}/api/products`)
+  const products: Product[] = await response.json()
+
+  return (
+    <ul>
+      {products.map((product) => (
+        <li key={product.id}>{product.name}</li>
+      ))}
+    </ul>
+  )
+}
+
+// ✅ Correct: call the same function the Route Handler uses
+import { fetchProducts } from '@/lib/products'
+
+export default async function ProductsPage() {
+  const products = await fetchProducts()
+
+  return (
+    <ul>
+      {products.map((product) => (
+        <li key={product.id}>{product.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
+
+- Keep the Route Handler for callers outside the server render: Client
+  Components, webhooks, mobile apps, and third parties.
+
+## `import 'server-only'` on server modules
+
+A module that reads the database or a secret can end up in the client bundle
+through one careless import. `import 'server-only'` turns that import into a
+build error instead of shipped code.
+
+```typescript
+// ❌ Incorrect: nothing stops a Client Component from importing this module
+import { database } from '@/lib/database'
+
+export async function fetchOrdersForUser(userId: string) {
+  return database.order.findMany({ where: { userId } })
+}
+
+// ✅ Correct: a client import now fails the build
+import 'server-only'
+
+import { database } from '@/lib/database'
+
+export async function fetchOrdersForUser(userId: string) {
+  return database.order.findMany({ where: { userId } })
+}
+```
+
+- Next.js resolves `server-only` itself — install the package only if lint
+  flags the import as an extraneous dependency.
 
 ## Serializable props
 

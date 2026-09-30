@@ -111,7 +111,7 @@ export default async function PhotoModal({ params }: PhotoModalProps) {
 
   const photo = await fetchPhotoById(photoId)
 
-  if (photo === null) {
+  if (!photo) {
     notFound()
   }
 
@@ -154,7 +154,7 @@ export default async function PhotoModal({ params }: PhotoModalProps) {
 
   const photo = await fetchPhotoById(photoId)
 
-  if (photo === null) {
+  if (!photo) {
     notFound()
   }
 
@@ -182,7 +182,7 @@ export default async function PhotoPage({ params }: PhotoPageProps) {
 
   const photo = await fetchPhotoById(photoId)
 
-  if (photo === null) {
+  if (!photo) {
     notFound()
   }
 

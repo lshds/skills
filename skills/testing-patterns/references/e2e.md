@@ -91,7 +91,7 @@ test('should open settings', async ({ page }) => {
 const e2eUserEmail = process.env.E2E_USER_EMAIL
 const e2eUserPassword = process.env.E2E_USER_PASSWORD
 
-if (e2eUserEmail === undefined || e2eUserPassword === undefined) {
+if (!e2eUserEmail || !e2eUserPassword) {
   throw new Error('Missing E2E user credentials')
 }
 

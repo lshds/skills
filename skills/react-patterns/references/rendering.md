@@ -1,7 +1,7 @@
 # Rendering
 
 Prefer explicit conditionals over `&&` with numbers — a falsy `0` renders as
-text.
+text. Check optional lists with `?.length` in a ternary.
 
 ## Conditional render: ternary over `&&`
 
@@ -13,6 +13,19 @@ text.
 
 // ✅ Correct: explicit boolean / ternary — nothing leaks when count is 0
 {count > 0 ? <Badge count={count} /> : null}
+```
+
+## Optional lists: `?.length` in a ternary
+
+An undefined check plus a length comparison says the same thing twice.
+`?.length` covers both a missing list and an empty one.
+
+```tsx
+// ❌ Incorrect: spelled-out undefined check plus a length comparison
+{items !== undefined && items.length > 0 && <ItemList items={items} />}
+
+// ✅ Correct: one optional-chain length check in a ternary
+{items?.length ? <ItemList items={items} /> : null}
 ```
 
 ## Keep markup in the component

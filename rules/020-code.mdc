@@ -15,6 +15,8 @@ Applies when writing, editing, reviewing, or refactoring code.
 - Prefer immutable updates (return new objects/copies). Mutate only when the language/API or a measured hot path requires it — keep that change local and obvious.
 - Prefer flat **role folders** under `src/*` (`components/`, `services/`, `pages/` / `screens/`, …) — not deep feature/domain trees. Many small files; typical 200–400 lines, max 800. Match the repo’s role names if they already differ; don’t invent unused role folders.
 - Keep units of work small and nesting shallow. Prefer clear names; avoid hardcoded magic values.
+- Trust the types — no checks, optional chaining, or fallbacks for states the types or an earlier guard already rule out; validate once at the boundary.
+- No comments that narrate what the next line does — comment only a constraint or reason the code can't show.
 - Match existing style in the file/repo — imports, naming, patterns. If patterns are poor, follow best practices (don’t copy bad structure). Whitespace/quotes/semicolons → Lint / format; never “improve” format by taste.
 
 ## Lint / format

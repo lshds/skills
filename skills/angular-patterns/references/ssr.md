@@ -20,7 +20,7 @@ export class AnalyticsChart {
     afterNextRender(() => {
       const chartElement = document.getElementById('chart')
 
-      if (chartElement === null) {
+      if (!chartElement) {
         return
       }
 

@@ -88,7 +88,7 @@ const AUTH_STORAGE_STATE_PATH = 'playwright/.auth/user.json'
 const e2eUserEmail = process.env.E2E_USER_EMAIL
 const e2eUserPassword = process.env.E2E_USER_PASSWORD
 
-if (e2eUserEmail === undefined || e2eUserPassword === undefined) {
+if (!e2eUserEmail || !e2eUserPassword) {
   throw new Error('Missing E2E user credentials')
 }
 
@@ -186,7 +186,7 @@ export default defineConfig({
 })
 
 // ✅ Correct: CI-only retries; evidence on failure; forbid .only; fewer workers
-const isCiEnvironment = process.env.CI !== undefined
+const isCiEnvironment = Boolean(process.env.CI)
 
 export default defineConfig({
   retries: isCiEnvironment ? 2 : 0,

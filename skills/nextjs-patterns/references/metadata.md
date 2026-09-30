@@ -41,7 +41,7 @@ export async function generateMetadata({
 
   const product = await fetchProductBySlug(productSlug)
 
-  if (product === null) {
+  if (!product) {
     return {}
   }
 
@@ -61,7 +61,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const product = await fetchProductBySlug(productSlug)
 
-  if (product === null) {
+  if (!product) {
     notFound()
   }
 
@@ -108,7 +108,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const product = await fetchProductBySlug(productSlug)
 
-  if (product === null) {
+  if (!product) {
     notFound()
   }
 

@@ -120,7 +120,7 @@ export async function seedDemoUser(): Promise<void> {
 export async function seedDemoUser(): Promise<void> {
   const demoPasswordHash = process.env.SEED_DEMO_PASSWORD_HASH
 
-  if (demoPasswordHash === undefined) {
+  if (!demoPasswordHash) {
     throw new Error('SEED_DEMO_PASSWORD_HASH is required for local seeds')
   }
 
@@ -184,7 +184,7 @@ export async function seedDemoOrder(): Promise<void> {
     .from(user)
     .where(eq(user.email, DEMO_USER_EMAIL))
 
-  if (demoUser === undefined) {
+  if (!demoUser) {
     throw new Error('demo user missing — seed users first')
   }
 

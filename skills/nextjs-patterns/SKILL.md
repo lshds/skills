@@ -63,16 +63,18 @@ agree.
 ### File conventions
 
 One role per special file — `page`, `layout`, `loading`, `error`, `not-found`,
-`route`. `params` and `searchParams` are Promises: `await` them. Special files
-own the URL; other files may sit beside them. Match the repo (`lib/` vs
-colocated). Prefix a folder with `_` when it should not be a segment. See
-[file-conventions.md](references/file-conventions.md).
+`route`. `await` `params` / `searchParams`; narrow `searchParams` values.
+Trust required segments (`[id]`); only `[[...slug]]` can be missing. Call
+`notFound()` / `redirect()` as statements outside `try` / `catch` (they return
+`never`). See [file-conventions.md](references/file-conventions.md).
 
 ### Server vs client
 
 Server Components are the default (async, data, secrets). Add `'use client'`
 only for hooks, events, or browser APIs. Props across the boundary must be
-serializable. See [server-vs-client.md](references/server-vs-client.md).
+serializable. A Server Component calls the data function directly — never
+`fetch` its own `/api/...` Route Handler. See
+[server-vs-client.md](references/server-vs-client.md).
 
 ### Proxy
 
@@ -130,6 +132,9 @@ an argument and `cacheTag` in the same scope. `updateTag` in actions;
 | Cache a profile without a user/tenant argument | Pass `userId` into the cached function and tag with it |
 | 403 when the caller is signed out | 401 unsigned; 403 signed-in without permission |
 | Read `params` / `searchParams` as a plain object | `await params` and `await searchParams` |
+| `if (!slug)` on a required segment; `return notFound()` | Trust the segment; `notFound()` as a statement |
+| Server Component `fetch`es its own `/api/...` | Call the data function the Route Handler uses |
+| Pages Router APIs in `app/` — `next/router`, `getServerSideProps`, `next/head` | `next/navigation`, an async Server Component, `generateMetadata` |
 
 ## Practice areas
 
@@ -137,8 +142,8 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| `page` / `layout` / `loading` / `params` | [file-conventions.md](references/file-conventions.md) |
-| Server vs client / serializable props | [server-vs-client.md](references/server-vs-client.md) |
+| `page` / `layout` / `loading` / `params` / `searchParams` / `notFound` | [file-conventions.md](references/file-conventions.md) |
+| Server vs client / serializable props / own Route Handler / `server-only` | [server-vs-client.md](references/server-vs-client.md) |
 | `proxy.ts` / matchers / public- vs protected-first | [proxy.md](references/proxy.md) |
 | Server Actions / session / `redirect` / `{ kind: 'error' }` | [server-actions.md](references/server-actions.md) |
 | Route handlers / 401 / 403 / 404 / 201 | [route-handlers.md](references/route-handlers.md) |

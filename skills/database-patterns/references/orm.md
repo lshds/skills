@@ -57,7 +57,7 @@ export async function createUser(email: string, userName: string) {
 export async function createUser(userData: UserInsert): Promise<UserRow> {
   const [createdUser] = await db.insert(user).values(userData).returning()
 
-  if (createdUser === undefined) {
+  if (!createdUser) {
     throw new Error('failed to create user')
   }
 
@@ -129,7 +129,7 @@ export async function createUser(email: string, userName: string) {
     .insert({ email, name: userName })
     .returning(['id', 'email'])
 
-  if (createdUser === undefined) {
+  if (!createdUser) {
     throw new Error('failed to create user')
   }
 
@@ -342,7 +342,7 @@ const CONNECTION_TIMEOUT_MS = 2_000
 
 const databaseUrl = process.env.DATABASE_URL
 
-if (databaseUrl === undefined) {
+if (!databaseUrl) {
   throw new Error('DATABASE_URL is required')
 }
 
@@ -396,7 +396,7 @@ const CONNECTION_TIMEOUT_MS = 2_000
 
 const databaseUrl = process.env.DATABASE_URL
 
-if (databaseUrl === undefined) {
+if (!databaseUrl) {
   throw new Error('DATABASE_URL is required')
 }
 

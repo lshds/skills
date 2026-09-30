@@ -109,9 +109,9 @@ export function SelectionProvider({ children }: SelectionProviderProps) {
   const [state, dispatch] = useReducer(selectionReducer, { selectedId: null })
 
   return (
-    <SelectionContext.Provider value={{ state, dispatch }}>
+    <SelectionContext value={{ state, dispatch }}>
       {children}
-    </SelectionContext.Provider>
+    </SelectionContext>
   )
 }
 
@@ -127,3 +127,5 @@ export function useSelection() {
 ```
 
 Prefer the repo’s store (Zustand, etc.) when that is already the shared-state pattern — don’t add Context+reducer beside an existing store in the same feature.
+
+- Render the context itself as the provider (`<SelectionContext value={…}>`) — `.Provider` is the pre-React 19 form. On React 18, keep `.Provider`.

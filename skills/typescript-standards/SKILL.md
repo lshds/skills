@@ -5,7 +5,8 @@ description: >-
   skill should be used when writing, reviewing, or tightening TypeScript to
   ensure sound typing and conventions. Prefer `unknown` + guards, immutability,
   and inference over `any` or escape hatches. Triggers on types, interfaces,
-  naming, imports, control flow, async composition, JSDoc, or “make it stricter.”
+  naming, imports, control flow, guards, null/undefined checks, async
+  composition, JSDoc, or “make it stricter.”
 ---
 
 # TypeScript Skills
@@ -63,7 +64,13 @@ Path alias + `import type`. See [imports.md](references/imports.md).
 
 ### Control flow
 
-Early `return` / `throw`; prefer `??` over `||`; use `?.`; `if` or `return`, not `continue`; blank line before guards and before the happy-path `return`. See [control-flow.md](references/control-flow.md).
+- Early `return` / `throw`; `if` or `return`, not `continue`; blank line before guards and before the happy-path `return`
+- Pick the missing-value check from the type: `!value` for objects, arrays, and strings where `''` means missing; `value === undefined` for numbers, booleans, and strings where `''` is valid
+- Trust the types inside the boundary — one guard per concern; no re-checks, `?.`, or fallbacks for what the type already rules out
+- Prefer `undefined` inside — convert `null` at the boundary and never carry `null | undefined` for one value; keep `null` only where the receiving API gives it a meaning
+- `??` over `||`; `?.` for optional chains
+
+See [control-flow.md](references/control-flow.md).
 
 ### Async
 
@@ -71,11 +78,11 @@ Avoid request waterfalls. Parallelize independent work; defer `await` until the 
 
 ### Noise to skip
 
-Omit obvious annotations and wrappers. See [noise-to-skip.md](references/noise-to-skip.md).
+Omit obvious annotations, spelled-out `undefined`, boolean wrappers, and return-only locals. See [noise-to-skip.md](references/noise-to-skip.md).
 
 ### JSDoc
 
-Short purpose-first docs: what it does, args, return with links to types. Don’t restate types TypeScript already shows, and skip comments on small internal helpers when the signature is clear enough. See [jsdoc.md](references/jsdoc.md).
+Short purpose-first docs: what it does, args, return with links to types. Don’t restate types TypeScript already shows, and skip comments on small internal helpers when the signature is clear enough. Inline comments explain a reason or rule the code can’t show — never narrate what the next line does. See [jsdoc.md](references/jsdoc.md).
 
 ### Common mistakes
 
@@ -85,6 +92,10 @@ Short purpose-first docs: what it does, args, return with links to types. Don’
 | `continue` in `for` | Matching `if`, or extract + early `return` |
 | `export const` + chained `&&` for multi-step | `export function` + early returns |
 | Annotate what TypeScript already infers | Omit the noise; document purpose on exports |
+| `x === undefined` on an object, array, or token | `!x` — keep `=== undefined` for numbers, booleans, and strings where `''` is valid |
+| `user?.name ?? ''` / `items ?? []` on non-optional types | Trust the declared type |
+| `x === null \|\| x === undefined` / `null \| undefined` inside | Convert `null` at the boundary; inside, one missing value — `undefined` unless the receiving API gives `null` a meaning |
+| `// Check if user exists` above `if (!user)` | No comment — or the reason the code can’t show |
 
 ## Practice areas
 
@@ -98,7 +109,7 @@ Read the reference for the task — don’t load every file.
 | Escape hatches (`as` / `!`) | [escape-hatches.md](references/escape-hatches.md) |
 | Imports / `import type` | [imports.md](references/imports.md) |
 | Functions / export vs arrow | [functions.md](references/functions.md) |
-| Control flow / early return / `??` / `if` or `return`, not `continue` | [control-flow.md](references/control-flow.md) |
+| Control flow / early return / missing-value checks / trust the types / `null` vs `undefined` / `??` / `if` or `return`, not `continue` | [control-flow.md](references/control-flow.md) |
 | Async waterfalls / deferred await | [async.md](references/async.md) |
-| Noise to skip / inference | [noise-to-skip.md](references/noise-to-skip.md) |
-| JSDoc / TSDoc on exports | [jsdoc.md](references/jsdoc.md) |
+| Noise to skip / inference / spelled-out `undefined` / boolean wrappers / return the expression | [noise-to-skip.md](references/noise-to-skip.md) |
+| JSDoc / TSDoc on exports / inline comments | [jsdoc.md](references/jsdoc.md) |

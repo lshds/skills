@@ -59,9 +59,9 @@ export function Tabs({ defaultTab, children }: TabsRootProps) {
   const [activeTab, setActiveTab] = useState(defaultTab)
 
   return (
-    <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+    <TabsContext value={{ activeTab, setActiveTab }}>
       {children}
-    </TabsContext.Provider>
+    </TabsContext>
   )
 }
 
@@ -98,3 +98,6 @@ export function Tab({ tabId, children }: TabProps) {
   )
 }
 ```
+
+Render the context itself as the provider (`<TabsContext value={…}>`) —
+`.Provider` is the pre-React 19 form. On React 18, keep `.Provider`.

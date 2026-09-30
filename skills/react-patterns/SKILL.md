@@ -46,7 +46,11 @@ generic Node / non-`.tsx` server handlers.
 
 ### Components
 
-Function components only (`export function`) — no class components except error boundaries when the repo has no shared alternative. Props via `interface`; avoid `React.FC`; type `children` explicitly when used. List `key`s from stable identity (id), not array index, unless the list is static and never reorders. Blank line before guards and before the happy-path `return` / JSX so exits scan cleanly. See [components.md](references/components.md).
+Function components only (`export function`) — no class components except error boundaries when the repo has no shared alternative. Props via `interface`; avoid `React.FC`; type `children` explicitly when used. List `key`s from stable identity (id), not array index, unless the list is static and never reorders. Defaults in the destructured signature (`{ tone = 'info' }`); call optional callbacks with `onDismiss?.()` — no `=== undefined` checks in the body. Render nothing with `return null`, not a bare `return`. Pass a handler that takes no arguments (or just the event) directly — `onClick={handleSave}`, not `() => handleSave()`. Blank line before guards and before the happy-path `return` / JSX so exits scan cleanly. See [components.md](references/components.md).
+
+### React 19
+
+Check `react` in `package.json` first. On React 19, `ref` is a regular prop — no `forwardRef` — and a context renders as its own provider (`<ThemeContext value={…}>`, not `.Provider`). On React 18, keep `forwardRef` and `.Provider` — there `<ThemeContext>` renders a consumer, not a provider. See [components.md](references/components.md).
 
 ### Hooks
 
@@ -78,11 +82,11 @@ Don’t pre-optimize. Add `useMemo` / `useCallback` / `memo` only for proven cos
 
 ### Rendering
 
-Ternary / explicit boolean over `&&` with numbers so `0` never leaks into the tree. See [rendering.md](references/rendering.md).
+Ternary / explicit boolean over `&&` with numbers so `0` never leaks into the tree. Optional lists: `items?.length ? … : null`, not an undefined check plus a length comparison. See [rendering.md](references/rendering.md).
 
 ### Forms
 
-React implementation: controlled inputs or the repo’s form lib; `isPending` / error state on submit. See [forms.md](references/forms.md).
+React implementation: controlled inputs or the repo’s form lib; `isPending` / error state on submit. Forms that post to a Server Action on React 19 use `useActionState` + `<form action>` (and `useFormStatus` in a nested submit button) — not hand-rolled pending state or the deprecated `useFormState`. See [forms.md](references/forms.md).
 
 ### Composition
 
@@ -105,6 +109,10 @@ No request data in module scope; parallel fetch via composition; lean RSC props;
 | Nested component type / props→state reset effect | Module-scope child + `key` remount ([rerender.md](references/rerender.md)) |
 | Double-submit or wipe field on failed save | `isPending` guard; keep values on recoverable failure |
 | Await sibling data in one RSC parent | Sibling async components so fetches start together |
+| `tone === undefined ? 'info' : tone` / `if (onDismiss !== undefined)` in the body | Default in the signature; `onDismiss?.()` |
+| Bare `return` for an empty render | `return null` |
+| `forwardRef` / `<Context.Provider>` on React 19 | `ref` as a prop / `<Context value>` |
+| Hand-rolled `isPending` around a Server Action form | `useActionState` + `<form action>` |
 
 ## Practice areas
 
@@ -112,15 +120,15 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| Components / props / keys / files | [components.md](references/components.md) |
+| Components / props / `ref` prop / optional props / `return null` / keys / files | [components.md](references/components.md) |
 | Hooks / custom `use*` / effect cleanup & deps | [hooks.md](references/hooks.md) |
 | Remounts / laggy input / derive-vs-effect / transitions | [rerender.md](references/rerender.md) |
 | Stable subscriptions / `useEffectEvent` / init-once | [advanced.md](references/advanced.md) |
 | Local UI / Context+reducer / shared state | [state.md](references/state.md) |
 | Client data / Suspense / shared listeners | [client-data.md](references/client-data.md) |
 | Memo / `useMemo` / `useCallback` / stable defaults | [memoization.md](references/memoization.md) |
-| Conditional render (`&&` vs ternary) | [rendering.md](references/rendering.md) |
-| Forms / controlled submit / `isPending` | [forms.md](references/forms.md) |
+| Conditional render (`&&` vs ternary) / optional lists `?.length` | [rendering.md](references/rendering.md) |
+| Forms / controlled submit / `isPending` / `useActionState` / `useFormStatus` | [forms.md](references/forms.md) |
 | Composition / children / compound components | [composition.md](references/composition.md) |
 | Error boundaries / feature islands / fallback | [error-boundaries.md](references/error-boundaries.md) |
 | RSC / Server Actions / cache / serialization | [server.md](references/server.md) |

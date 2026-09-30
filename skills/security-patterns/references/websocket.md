@@ -103,7 +103,7 @@ server.on('connection', (socket, request) => {
   socket.on('message', (rawMessage) => {
     const messageText = toMessageText(rawMessage)
 
-    if (messageText === undefined) {
+    if (!messageText) {
       socket.send(JSON.stringify({ error: 'Invalid message' }))
       return
     }

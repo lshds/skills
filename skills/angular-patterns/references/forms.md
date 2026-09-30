@@ -139,7 +139,7 @@ readonly passwordForm = form(this.passwordModel, (schemaPath) => {
   required(schemaPath.confirmPassword)
   validate(schemaPath.confirmPassword, ({ value, valueOf }) => {
     if (value() === valueOf(schemaPath.password)) {
-      return undefined
+      return
     }
 
     return { kind: 'passwordMismatch', message: 'Passwords must match' }

@@ -47,7 +47,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.get('session') !== undefined
+  const hasSession = request.cookies.has('session')
 
   if (!hasSession) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
@@ -75,7 +75,7 @@ function isProtectedPath(pathname: string): boolean {
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
-  const hasSession = request.cookies.get('session') !== undefined
+  const hasSession = request.cookies.has('session')
 
   if (isProtectedPath(pathname) && !hasSession) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
@@ -99,7 +99,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.get('session') !== undefined
+  const hasSession = request.cookies.has('session')
 
   if (!hasSession) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
@@ -128,7 +128,7 @@ function isPublicPath(pathname: string): boolean {
 
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
-  const hasSession = request.cookies.get('session') !== undefined
+  const hasSession = request.cookies.has('session')
 
   if (!isPublicPath(pathname) && !hasSession) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
@@ -165,7 +165,7 @@ export async function deleteInvoice(invoiceId: string) {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     redirect('/sign-in')
   }
 

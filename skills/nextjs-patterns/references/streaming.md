@@ -47,7 +47,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   const product = await fetchProductById(productId)
 
-  if (product === null) {
+  if (!product) {
     notFound()
   }
 
@@ -124,7 +124,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
   const order = await fetchOrderById(orderId)
 
-  if (order === null) {
+  if (!order) {
     notFound()
   }
 
@@ -164,7 +164,7 @@ again instead of keeping the previous result.
 import { Suspense } from 'react'
 
 interface ProductsPageProps {
-  searchParams: Promise<{ category?: string; page?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 interface ProductListProps {
@@ -175,9 +175,10 @@ interface ProductListProps {
 export default async function ProductsPage({
   searchParams,
 }: ProductsPageProps) {
-  const { category: selectedCategory, page: rawPageValue } =
-    await searchParams
+  const { category: rawCategory, page: rawPageValue } = await searchParams
 
+  const selectedCategory =
+    typeof rawCategory === 'string' ? rawCategory : undefined
   const currentPage = readPageNumber(rawPageValue)
 
   return (
@@ -197,7 +198,7 @@ export default async function ProductsPage({
 import { Suspense } from 'react'
 
 interface ProductsPageProps {
-  searchParams: Promise<{ category?: string; page?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 interface ProductListProps {
@@ -208,9 +209,10 @@ interface ProductListProps {
 export default async function ProductsPage({
   searchParams,
 }: ProductsPageProps) {
-  const { category: selectedCategory, page: rawPageValue } =
-    await searchParams
+  const { category: rawCategory, page: rawPageValue } = await searchParams
 
+  const selectedCategory =
+    typeof rawCategory === 'string' ? rawCategory : undefined
   const currentPage = readPageNumber(rawPageValue)
 
   return (
@@ -247,8 +249,8 @@ async function ProductList({
   )
 }
 
-function readPageNumber(rawPageValue: string | undefined) {
-  if (rawPageValue === undefined) {
+function readPageNumber(rawPageValue: string | string[] | undefined) {
+  if (typeof rawPageValue !== 'string') {
     return 1
   }
 

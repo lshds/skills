@@ -11,7 +11,7 @@ Prefer `@ts-expect-error` with a reason if an ignore is unavoidable. Never `as` 
 // ❌ Incorrect: silence the checker — cast, non-null assertion, @ts-ignore
 const user = rawValue as User
 const userName = user!.name
-processItem(items[0]!)
+recordScore(scores[0]!)
 // @ts-ignore — never; prefer @ts-expect-error + reason if unavoidable
 
 // ❌ Incorrect: cast after JSON.parse — parsed value is unknown at runtime
@@ -47,14 +47,14 @@ function parseConfig(rawJson: string): Config | undefined {
   return isConfig(parsedPayload) ? parsedPayload : undefined
 }
 
-// ✅ Correct: handle indexed T | undefined — guard before use
-const firstItem = items[0]
+// ✅ Correct: handle indexed T | undefined — explicit check because 0 is a valid score
+const firstScore = scores[0]
 
-if (firstItem === undefined) {
+if (firstScore === undefined) {
   return
 }
 
-processItem(firstItem)
+recordScore(firstScore)
 ```
 
 ## When `as` is OK

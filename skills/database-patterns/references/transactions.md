@@ -89,7 +89,7 @@ export async function chargeOrder(
       .values({ userId, status: 'pending', amount: chargeAmount })
       .returning({ id: order.id })
 
-    if (createdOrder === undefined) {
+    if (!createdOrder) {
       throw new Error('failed to create order')
     }
 
@@ -120,7 +120,7 @@ export async function chargeOrder(
     .values({ userId, status: 'pending', amount: chargeAmount })
     .returning({ id: order.id })
 
-  if (createdOrder === undefined) {
+  if (!createdOrder) {
     throw new Error('failed to create order')
   }
 
@@ -151,7 +151,7 @@ export async function chargeOrder(
       .values({ userId, status: 'pending', amount: chargeAmount })
       .returning({ id: order.id })
 
-    if (createdOrder === undefined) {
+    if (!createdOrder) {
       throw new Error('failed to create order')
     }
 
@@ -282,7 +282,7 @@ export async function debitAccount(
       .from(account)
       .where(eq(account.id, fromAccountId))
 
-    if (sourceAccount === undefined) {
+    if (!sourceAccount) {
       return
     }
 
@@ -308,7 +308,7 @@ export async function debitAccount(
       .from(account)
       .where(eq(account.id, fromAccountId))
 
-    if (sourceAccount === undefined) {
+    if (!sourceAccount) {
       throw new Error(`account ${fromAccountId} not found`)
     }
 
@@ -380,7 +380,7 @@ export async function debitAccount(
       .forUpdate()
       .first()
 
-    if (sourceAccount === undefined) {
+    if (!sourceAccount) {
       return
     }
 
@@ -405,7 +405,7 @@ export async function debitAccount(
       .forUpdate()
       .first()
 
-    if (sourceAccount === undefined) {
+    if (!sourceAccount) {
       throw new Error(`account ${fromAccountId} not found`)
     }
 

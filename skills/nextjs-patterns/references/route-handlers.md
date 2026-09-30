@@ -45,7 +45,7 @@ export async function GET(
     where: { id: productId },
   })
 
-  if (product === null) {
+  if (!product) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -64,7 +64,7 @@ import { NextResponse } from 'next/server'
 
 export async function DELETE() {
   const cookieStore = await cookies()
-  const hasSession = cookieStore.get('session') !== undefined
+  const hasSession = cookieStore.has('session')
 
   if (!hasSession) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -81,7 +81,7 @@ export async function DELETE() {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -119,7 +119,7 @@ export async function GET(
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -149,7 +149,7 @@ export async function GET(
 
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -165,7 +165,7 @@ export async function GET(
     where: { id: session.organizationId },
   })
 
-  if (organization === null) {
+  if (!organization) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -204,14 +204,14 @@ export async function POST(request: Request) {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const requestBody: unknown = await request.json()
   const productTitle = readProductTitleFromBody(requestBody)
 
-  if (productTitle === undefined) {
+  if (!productTitle) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 

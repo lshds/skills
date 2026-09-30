@@ -38,14 +38,14 @@ export async function loadCatalog(): Promise<Catalog> {
 }
 
 // ✅ Correct: checked when the module is first evaluated
-type PublicEnvironment = {
+interface PublicEnvironment {
   apiBaseUrl: string
 }
 
 function parsePublicEnvironment(): PublicEnvironment {
   const apiBaseUrl = process.env.API_URL
 
-  if (apiBaseUrl === undefined || apiBaseUrl === '') {
+  if (!apiBaseUrl) {
     throw new Error('API_URL is required')
   }
 

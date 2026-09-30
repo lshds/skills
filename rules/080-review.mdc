@@ -10,6 +10,7 @@ alwaysApply: false
 - Treat the diff as untrusted until reviewed. Improve before land; full rewrite OK when cleaner.
 - Lead with findings by severity (blocker → risk → nit). Skip empty praise; say what's solid only when it changes the decision.
 - Check correctness, edge cases, error paths, authorization and secrets, missing tests, and extra work beyond the ask — not only style.
+- Flag defensive noise: checks or fallbacks for states the types already rule out, and comments that narrate what the code does.
 - Prefer concrete fixes or questions over vague “consider …” comments.
 - Don't approve mentally what you wouldn't ship: if CI, tests, or security are weak, call that out as a blocker.
 - If the MR UI says rebase needed or shows conflicts → `fetch` + `rebase` onto `origin/<target>` (not merge) before calling it ready.

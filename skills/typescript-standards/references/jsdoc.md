@@ -3,7 +3,7 @@
 Short purpose-first docs for non-obvious TypeScript APIs: what it does, what it
 takes, what it returns, with links to the types. Don’t restate types TypeScript
 already shows, and skip comments on small internal helpers when the signature is
-clear enough.
+clear enough. Inline comments explain why, never narrate what the next line does.
 
 ## When to document
 
@@ -156,6 +156,39 @@ export const QUERY_STALE_TIME_MS = 60_000
  * Must stay under the gateway’s 15s idle limit — clients that exceed it get dropped.
  */
 export const SETTINGS_HANDSHAKE_TIMEOUT_MS = 10_000
+```
+
+## Inline comments: the why, not the what
+
+Don’t narrate the next line. Keep an inline comment only for a reason or
+rule the code can’t show.
+
+```typescript
+// ❌ Incorrect: comments narrate what the next line already says
+export async function archiveProject(projectId: string) {
+  // Load the project
+  const project = await loadProject(projectId)
+
+  // Check if the project exists
+  if (!project) {
+    return
+  }
+
+  // Archive the project
+  await saveProject({ ...project, isArchived: true })
+}
+
+// ✅ Correct: no narration; one comment for the rule the code can’t show
+export async function archiveProject(projectId: string) {
+  const project = await loadProject(projectId)
+
+  if (!project) {
+    return
+  }
+
+  // Keep the row — billing reconciles archived projects for 90 days
+  await saveProject({ ...project, isArchived: true })
+}
 ```
 
 ## Comment prose

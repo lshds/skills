@@ -37,7 +37,7 @@ export default async function ProfilePage() {
   const cookieStore = await cookies()
   const sessionToken = cookieStore.get('session')?.value
 
-  if (sessionToken === undefined) {
+  if (!sessionToken) {
     return <p>Not signed in</p>
   }
 
@@ -63,7 +63,7 @@ export async function updateProfile(formData: FormData) {
 
   const profileName = readProfileNameFromForm(formData)
 
-  if (profileName === undefined) {
+  if (!profileName) {
     return { kind: 'error', message: 'Name is required' }
   }
 
@@ -89,7 +89,7 @@ export async function updateProfile(
 
   const profileName = readProfileNameFromForm(formData)
 
-  if (profileName === undefined) {
+  if (!profileName) {
     return { kind: 'error', message: 'Name is required' }
   }
 
