@@ -33,6 +33,9 @@ CREATE TABLE order_detail (
   `uid` or `fk_customer`).
 - Use the same stem for the table, primary key context, FK prefixes, and
   entity class — one vocabulary, not singular class + plural table.
+- Singular nouns such as `order` and `user` are reserved words: quote them in
+  raw SQL (`"order"`, `"user"` on PostgreSQL; `` `order` `` on MySQL) or
+  pick a non-reserved noun for a new table. ORM model names need no quotes.
 - The integer primary key is database-generated: `GENERATED ALWAYS AS
   IDENTITY` on PostgreSQL, `BIGINT UNSIGNED AUTO_INCREMENT` on MySQL.
   Examples in this file show naming and column shape; put the matching

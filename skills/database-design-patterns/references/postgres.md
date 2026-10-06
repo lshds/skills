@@ -11,23 +11,24 @@ standard-compliant identity column; a random UUID as the primary key
 fragments the index because rows no longer insert in a predictable order.
 
 ```sql
--- ❌ Incorrect: legacy serial type, random UUID as the primary key
-CREATE TABLE user (
+-- ❌ Incorrect: legacy serial key; random UUIDv4 inserts scatter across the unique index
+CREATE TABLE "user" (
   id SERIAL PRIMARY KEY,
   external_id UUID DEFAULT gen_random_uuid()
 );
 
--- ✅ Correct: identity column; UUID only as a secondary, opaque identifier
-CREATE TABLE user (
+-- ✅ Correct (PostgreSQL 18+): identity key; time-ordered UUIDv7 as the secondary identifier
+CREATE TABLE "user" (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  external_id UUID NOT NULL,
+  external_id UUID NOT NULL DEFAULT uuidv7(),
   UNIQUE (external_id)
 );
 ```
 
-- On PostgreSQL 18+, `DEFAULT uuidv7()` on `external_id` is fine. On earlier
-  majors, generate a time-ordered UUID in the application and insert it —
-  never `gen_random_uuid()` / `uuid_generate_v4()` as the primary key itself.
+- PostgreSQL 18 ships `uuidv7()`, so the database generates the external id.
+  On earlier majors, drop the `DEFAULT`, generate a UUIDv7 in the application,
+  and insert it. Never make `gen_random_uuid()` / `uuid_generate_v4()` values
+  the primary key itself.
 - Identity / sequence gaps from rollbacks and concurrency are normal — do not
   try to keep IDs consecutive.
 - Prefer `BIGINT` for IDs and foreign keys unless storage is proven critical.
@@ -106,25 +107,54 @@ CREATE TABLE product (
 );
 ```
 
+- Reach for `NULLS NOT DISTINCT` whenever a nullable column should still
+  enforce "at most one," including the `NULL` case.
+
+## Non-overlap with WITHOUT OVERLAPS
+
+An overlap check in application code races: two requests both see a free
+slot and both insert. A constraint on the range column makes the database
+reject the second booking.
+
 ```sql
--- ❌ Incorrect: application-only double-booking guard, no DB exclusion
+-- ❌ Incorrect: application-only double-booking guard, no database constraint
 CREATE TABLE booking (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   room_id BIGINT NOT NULL,
-  period TSTZRANGE NOT NULL
+  during TSTZRANGE NOT NULL
 );
 
--- ✅ Correct: EXCLUDE prevents overlapping bookings for the same room
+-- ✅ Correct (PostgreSQL 18+): temporal primary key rejects overlapping ranges per room
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+CREATE TABLE booking (
+  room_id BIGINT NOT NULL,
+  during TSTZRANGE NOT NULL,
+  PRIMARY KEY (room_id, during WITHOUT OVERLAPS)
+);
+
+-- ✅ Correct (partial rule or PostgreSQL 17 and earlier): EXCLUDE skips cancelled rows
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
 CREATE TABLE booking (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   room_id BIGINT NOT NULL,
-  period TSTZRANGE NOT NULL,
-  EXCLUDE USING gist (room_id WITH =, period WITH &&)
+  during TSTZRANGE NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('confirmed', 'cancelled')),
+  EXCLUDE USING gist (room_id WITH =, during WITH &&)
+    WHERE (status <> 'cancelled')
 );
 ```
 
-- Reach for `NULLS NOT DISTINCT` whenever a nullable column should still
-  enforce "at most one," including the `NULL` case.
+- `btree_gist` lets the GiST index behind the constraint compare plain
+  columns such as `room_id` by equality; enable it once per database.
+- The `WITHOUT OVERLAPS` column goes last and must be a range (or
+  multirange) type.
+- When other tables reference the row by an identity `id`, keep `id` as the
+  primary key and declare `UNIQUE (room_id, during WITHOUT OVERLAPS)` — same
+  overlap guarantee.
+- Keep `EXCLUDE USING gist` when the rule needs a `WHERE` predicate, an
+  operator other than equality plus `&&`, or the server is older than 18.
 - Prefer `[)` bounds for range types and keep that convention consistent.
 
 ## Index types
@@ -151,29 +181,59 @@ CREATE INDEX event_created_at_brin_idx ON event USING BRIN (created_at);
 
 ```sql
 -- ❌ Incorrect: widen the key just to cover selected columns
-CREATE INDEX order_customer_wide_idx ON order (customer_id, status, total);
+CREATE INDEX order_customer_wide_idx ON "order" (customer_id, status, total);
 
 -- ✅ Correct: INCLUDE adds covered columns without widening the key
-CREATE INDEX order_customer_idx ON order (customer_id) INCLUDE (status, total);
+CREATE INDEX order_customer_idx ON "order" (customer_id) INCLUDE (status, total);
 ```
 
 ```sql
 -- ❌ Incorrect: case-sensitive unique index when lookups lower the input
-CREATE UNIQUE INDEX user_email_idx ON user (email);
+CREATE UNIQUE INDEX user_email_idx ON "user" (email);
 
 -- ✅ Correct: expression index matching the query expression
-CREATE UNIQUE INDEX user_email_lower_idx ON user (LOWER(email));
+CREATE UNIQUE INDEX user_email_lower_idx ON "user" (LOWER(email));
 ```
 
 - **GIN** for `JSONB` containment (`@>`), key existence (`?`), and array
   operators (`@>`, `&&`).
-- **GiST** for range types and `EXCLUDE` constraints.
+- **GiST** for range types, `WITHOUT OVERLAPS`, and `EXCLUDE` constraints.
 - **BRIN** for very large, append-mostly tables where physical row order
   correlates with the indexed column.
 - **`INCLUDE`** adds columns to a covering index without making them part of
   the key, keeping the key itself narrow.
 - An expression index (for example `LOWER(email)`) only matches queries that
   use the exact same expression in the `WHERE` clause.
+
+## Generated columns
+
+PostgreSQL 18 computes a generated column on read (`VIRTUAL`) unless
+`STORED` is written. Virtual columns cost nothing on write but cannot be
+indexed; stored columns are written to disk on every insert and update.
+
+```sql
+-- ❌ Incorrect: STORED for a cheap, never-indexed derivation — every write pays to persist it
+CREATE TABLE order_item (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  price_cents BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  line_total_cents BIGINT GENERATED ALWAYS AS (price_cents * quantity) STORED
+);
+
+-- ✅ Correct (PostgreSQL 18+): virtual — computed on read, no storage or write cost
+CREATE TABLE order_item (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  price_cents BIGINT NOT NULL,
+  quantity INT NOT NULL,
+  line_total_cents BIGINT GENERATED ALWAYS AS (price_cents * quantity) VIRTUAL
+);
+```
+
+- Write `STORED` when the column is indexed or its expression is expensive
+  enough that computing it on every read costs more than storing it.
+- Always write the kind explicitly: PostgreSQL 17 and earlier support only
+  `STORED` and reject DDL without it, while 18 silently makes the column
+  virtual.
 
 ## JSONB
 
@@ -199,8 +259,8 @@ CREATE INDEX profile_theme_idx ON profile (theme);
 ```
 
 - Use `JSONB`, never `JSON`, unless original key order must be preserved.
-- Promote a JSONB path to a generated column the moment a query filters,
-  sorts, or joins on it regularly.
+- Promote a JSONB path to a `STORED` generated column (so it can be indexed)
+  the moment a query filters, sorts, or joins on it regularly.
 
 ## Partitioning
 

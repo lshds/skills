@@ -1,7 +1,10 @@
 # Soft Delete
 
 Prefer a hard delete unless the product needs to recover or audit removed
-rows. A nullable `deleted_at` is the exception, not the default.
+rows. A nullable `deleted_at` is the exception, not the default. The schema
+decides the column, uniqueness scoped to active rows, and cascade semantics;
+filtering deleted rows out of every read is a runtime data-access rule, not
+a schema decision.
 
 ## When to soft-delete vs. hard-delete
 
@@ -19,23 +22,6 @@ DELETE FROM session WHERE id = ?;
 
 - Default to hard delete. Add `deleted_at` only for tables with an explicit
   undo, retention, or audit requirement.
-
-## Scope every query to exclude deleted rows
-
-A soft-deleted row that isn't filtered out reappears in lists, reports, and
-joins as if it still exists.
-
-```sql
--- ❌ Incorrect: forgets to exclude soft-deleted rows
-SELECT id, customer_id, total FROM invoice WHERE customer_id = ?;
-
--- ✅ Correct: every read path filters on deleted_at
-SELECT id, customer_id, total FROM invoice
-WHERE customer_id = ? AND deleted_at IS NULL;
-```
-
-- Centralize this filter in one place (a view, scope, or repository method)
-  so it can't be forgotten in a new query.
 
 ## Unique constraints must exclude deleted rows
 

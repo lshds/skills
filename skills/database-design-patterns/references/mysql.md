@@ -42,7 +42,7 @@ does not.
 
 ```sql
 -- ❌ Incorrect: legacy utf8 alias, 2038-limited TIMESTAMP, FLOAT money
-CREATE TABLE order (
+CREATE TABLE `order` (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   note VARCHAR(500) CHARACTER SET utf8,
   total FLOAT NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE order (
 ) DEFAULT CHARSET=utf8;
 
 -- ✅ Correct: utf8mb4, DECIMAL for money, DATETIME for the full date range
-CREATE TABLE order (
+CREATE TABLE `order` (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   note VARCHAR(500),
   total DECIMAL(12, 2) NOT NULL,
@@ -81,17 +81,18 @@ should.
 
 ```sql
 -- ❌ Incorrect: range/sort column placed before the equality columns
-CREATE INDEX order_bad_idx ON order (created_at, user_id, status);
+CREATE INDEX order_bad_idx ON `order` (created_at, user_id, status);
 
 -- ✅ Correct: equality columns first, sort column last, matching direction
 CREATE INDEX order_user_status_created_idx
-  ON order (user_id, status, created_at DESC);
+  ON `order` (user_id, status, created_at DESC);
 ```
 
 - `EXPLAIN` shows `Using index` in `Extra` when a query is fully covered by
   the index — no row lookup against the table is needed.
 - Because a secondary index implicitly stores the primary key,
-  `INDEX(status)` alone already covers `SELECT id FROM order WHERE status = ?`.
+  `INDEX(status)` alone already covers
+  ``SELECT id FROM `order` WHERE status = ?``.
 - For long `VARCHAR` / `TEXT` columns that must be indexed, use a prefix
   index: `INDEX (description(191))`.
 

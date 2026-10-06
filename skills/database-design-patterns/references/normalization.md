@@ -10,7 +10,7 @@ another, invites the two values to drift apart.
 
 ```sql
 -- ❌ Incorrect: repeating group plus a derived column kept in sync by hand
-CREATE TABLE order (
+CREATE TABLE "order" (
   id BIGINT PRIMARY KEY,
   item_1_name TEXT,
   item_2_name TEXT,
@@ -69,7 +69,7 @@ latency target.
 
 ```sql
 -- ❌ Incorrect: denormalized total as the only copy of the line amounts
-CREATE TABLE order (
+CREATE TABLE "order" (
   id BIGINT PRIMARY KEY,
   total NUMERIC(12, 2) NOT NULL
 );
@@ -82,7 +82,7 @@ CREATE TABLE order_item (
   quantity INT NOT NULL
 );
 
-CREATE TABLE order (
+CREATE TABLE "order" (
   id BIGINT PRIMARY KEY
 );
 ```

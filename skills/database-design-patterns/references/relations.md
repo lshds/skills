@@ -50,12 +50,12 @@ otherwise it silently becomes 1:N.
 -- ❌ Incorrect: FK without uniqueness allows multiple profiles per user
 CREATE TABLE user_profile (
   id BIGINT PRIMARY KEY,
-  user_id BIGINT NOT NULL REFERENCES user (id)
+  user_id BIGINT NOT NULL REFERENCES "user" (id)
 );
 
 -- ✅ Correct: child's PK is the parent's PK — one profile, no extra key
 CREATE TABLE user_profile (
-  user_id BIGINT PRIMARY KEY REFERENCES user (id) ON DELETE CASCADE,
+  user_id BIGINT PRIMARY KEY REFERENCES "user" (id) ON DELETE CASCADE,
   bio TEXT
 );
 ```

@@ -5,9 +5,10 @@ description: >-
   be used when designing, reviewing, or choosing table shape — entities,
   keys, relations, or indexes — to ensure a 3NF target schema. Prefer 3NF
   with auto-incrementing BIGINT keys over premature denormalization. Triggers on
-  tables, PKs/FKs, identity, relations, normalization, indexing, soft delete,
-  multi-tenant columns, TIMESTAMPTZ, DATETIME, JSON, UUID-versus-integer,
-  junction tables, ON DELETE, CHECK versus enum, utf8mb4, or partitioning.
+  tables, PKs/FKs, identity, relations, normalization, indexing, soft-delete
+  column / scoped unique, multi-tenant columns, TIMESTAMPTZ, DATETIME, JSON,
+  UUID-versus-integer, uuidv7, WITHOUT OVERLAPS, generated columns, junction
+  tables, ON DELETE, CHECK versus enum, utf8mb4, or partitioning.
 ---
 
 # Database Design Skills
@@ -23,9 +24,9 @@ ids; 1:1 / 1:N / N:M and ON DELETE policy; 3NF versus measured denormalization;
 NOT NULL / CHECK / UNIQUE; soft versus hard delete; index access paths;
 engine-specific types, JSON, and partitioning.
 **Does not own:** how a live schema is rolled out or reversed; how application
-queries are projected, paginated, or batched at runtime; how the application
-maps rows to objects; who is allowed to read a row (only that owner/tenant
-columns exist on the row itself).
+queries are projected, paginated, batched, or scoped to non-deleted rows at
+runtime; how the application maps rows to objects; who is allowed to read a
+row (only that owner/tenant columns exist on the row itself).
 
 ## When to activate
 
@@ -48,10 +49,19 @@ columns exist on the row itself).
 
 ### Match the repo
 
-Follow the engine, key style, and naming already in the tree. Greenfield uses 3NF
-with auto-incrementing BIGINT primary keys. Don’t replace a mature UUID or
-natural-key primary key with BIGINT unless the user asked. If you find an older
-way to do the same work, say so and ask before replacing it.
+Read installed versions from `package.json` and the lockfile (plus the migrations folder and the database engine version). Follow the patterns already in the tree; greenfield defaults apply only where nothing contradicts them. When code lags behind what the installed version supports, finish the task in the existing style, then propose the migration once — old → new, why, file count, risk — and wait for a yes. Never fold it into the current change. In review, report the gap as a finding instead.
+
+Greenfield uses 3NF with auto-incrementing BIGINT primary keys. Keep the engine,
+key style, and naming already in the tree — a mature UUID or natural-key primary
+key stays unless the user asks to replace it.
+
+Version signals:
+
+- `SERIAL` / `BIGSERIAL` → `GENERATED ALWAYS AS IDENTITY` (PostgreSQL 10+)
+- application-generated time-ordered UUID workarounds → `DEFAULT uuidv7()`
+- `EXCLUDE USING gist (room_id WITH =, during WITH &&)` → `PRIMARY KEY (room_id, during WITHOUT OVERLAPS)`
+- an unindexed `GENERATED ALWAYS AS (price_cents * quantity) STORED` column → a virtual generated column
+- MySQL `utf8` (utf8mb3) → `utf8mb4` (MySQL 5.5.3+; the default since 8.0)
 
 ### Entity design & naming
 
@@ -67,9 +77,9 @@ tables. On append-only facts that are never updated in place, keep
 Prefer a database-generated `BIGINT` primary key that grows over time
 (1, 2, 3…) for every entity table — `BIGINT UNSIGNED` on MySQL. Keep
 natural or external IDs (email, UUID, slug) in a separate unique column —
-not as the primary key. Reserve composite primary keys for junction
-tables. See [postgres.md](references/postgres.md) or
-[mysql.md](references/mysql.md).
+not as the primary key; external UUIDs are time-ordered v7 (`DEFAULT uuidv7()`).
+Reserve composite primary keys for junction tables. See
+[postgres.md](references/postgres.md) or [mysql.md](references/mysql.md).
 
 ### Relations
 
@@ -91,14 +101,17 @@ schema-less attributes. See [normalization.md](references/normalization.md).
 `NOT NULL` wherever a value is semantically required; `CHECK` and `UNIQUE`
 enforce invariants in the database itself, not just the application. Prefer a
 `CHECK` constraint or lookup table over an enum type for values that evolve.
-See [postgres.md](references/postgres.md) or [mysql.md](references/mysql.md).
+Non-overlapping ranges (bookings, validity periods) get a database constraint
+— `WITHOUT OVERLAPS`, or `EXCLUDE USING gist` when the rule is partial. See
+[postgres.md](references/postgres.md) or [mysql.md](references/mysql.md).
 
 ### Soft delete
 
 Default to hard delete. Use nullable `deleted_at` only for recover/audit.
 Scope uniqueness to active rows (partial unique on PostgreSQL;
 NULL-when-deleted generated column on MySQL). Soft delete does not fire
-`ON DELETE CASCADE` — cascade children explicitly. See
+`ON DELETE CASCADE` — cascade children explicitly. Filtering deleted rows
+out of reads is a runtime data-access rule, not schema design. See
 [soft-delete.md](references/soft-delete.md).
 
 ### Indexing
@@ -140,10 +153,10 @@ Read the reference for the task — don't load every file.
 
 | Area | Reference |
 | --- | --- |
-| Entities / naming / temporal / ownership columns | [entities.md](references/entities.md) |
+| Entities / naming / reserved table names / temporal / ownership columns | [entities.md](references/entities.md) |
 | Relationship cardinality / FK delete policy | [relations.md](references/relations.md) |
 | Normalization / denormalization / structured vs. flexible attributes | [normalization.md](references/normalization.md) |
-| Indexing access paths / composite order / covering / partial | [indexing.md](references/indexing.md) |
-| Soft delete vs. hard delete / scoped uniqueness | [soft-delete.md](references/soft-delete.md) |
-| Keys / constraints / types / indexes / JSON / partitioning (PostgreSQL) | [postgres.md](references/postgres.md) |
+| Indexing access paths / composite order / skip scan / covering / partial | [indexing.md](references/indexing.md) |
+| Soft-delete column vs. hard delete / scoped unique / cascading soft delete | [soft-delete.md](references/soft-delete.md) |
+| Identity keys / uuidv7 / constraints / WITHOUT OVERLAPS / EXCLUDE / generated columns / types / indexes / JSONB / partitioning (PostgreSQL) | [postgres.md](references/postgres.md) |
 | Keys / constraints / types / charset / indexes / JSON / partitioning (MySQL) | [mysql.md](references/mysql.md) |
