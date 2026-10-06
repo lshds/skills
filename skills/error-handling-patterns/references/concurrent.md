@@ -77,31 +77,25 @@ export async function saveItems(
   return { savedItems }
 }
 
-// ✅ Correct: failed items stay in the result
+// ✅ Correct: allSettled reports every outcome — failed items stay in the result
 export async function saveItems(
   items: Item[],
 ): Promise<{ savedItems: Item[]; failedItems: Item[] }> {
-  const itemResults = await Promise.all(
-    items.map(async (item) => {
-      try {
-        const savedItem = await saveItem(item)
-        return { status: 'saved' as const, savedItem }
-      } catch (error: unknown) {
-        return { status: 'failed' as const, item, error }
-      }
-    }),
+  const saveResults = await Promise.allSettled(
+    items.map((item) => saveItem(item)),
   )
 
   return {
-    savedItems: itemResults.flatMap((itemResult) =>
-      itemResult.status === 'saved' ? [itemResult.savedItem] : [],
+    savedItems: saveResults.flatMap((saveResult) =>
+      saveResult.status === 'fulfilled' ? [saveResult.value] : [],
     ),
-    failedItems: itemResults.flatMap((itemResult) =>
-      itemResult.status === 'failed' ? [itemResult.item] : [],
+    failedItems: items.filter(
+      (item, itemIndex) => saveResults[itemIndex].status === 'rejected',
     ),
   }
 }
 ```
 
+- Prefer `Promise.allSettled` over a hand-rolled `try` / `catch` inside each `map` callback: it already reports each outcome as `fulfilled` (with `value`) or `rejected` (with `reason`), in input order, so result `itemIndex` belongs to `items[itemIndex]`.
 - Partial success is a real outcome only when the contract says so. Silence is a swallow.
 - If the parent is cancelled, stop work and propagate — don’t leave orphan tasks.

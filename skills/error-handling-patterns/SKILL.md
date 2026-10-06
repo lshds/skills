@@ -5,9 +5,9 @@ description: >-
   This skill should be used when designing, reviewing, or refactoring error
   paths to ensure safe client messages and correct taxonomy. Prefer typed
   operational errors and one edge mapping. Triggers on tasks involving error
-  handlers, status mapping, logging/cause chains, retries, degradation,
-  unowned async or partial batch failures, or choosing throw vs return when
-  absence is a normal outcome.
+  handlers, status mapping, logging/cause chains, retries, timeouts,
+  degradation, unowned async or partial batch failures, cleanup on failure,
+  or choosing throw vs return when absence is a normal outcome.
 ---
 
 # Error Handling Skills
@@ -23,7 +23,8 @@ signal it (throw vs return), and map it once at the application edge.
 caller outcome; deriving a transport signal from `kind` **once** at the edge
 (HTTP `statusCode`, or retry / dead-letter / exit code elsewhere); safe client
 messages vs server logs; retry / fail-fast / degrade policy; owned async
-failure paths and partial-batch failure contracts.
+failure paths and partial-batch failure contracts; resource cleanup on failure
+paths.
 **Does not own:** request-thread I/O, caching, or validation placement; HTTP/JSON
 envelope nesting or resource URL design; client UI loading / empty / error
 views; authn/authz rules (only the `kind` after a decision exists); schema and
@@ -52,7 +53,8 @@ type; don’t invent a new one.
 - **Review:** same headings; report only problems — generic `Error`, throw for a
   routine miss, `kind` or `cause` in JSON, `statusCode` as a JSON field unless
   this API already returns it, leak in `message`, retry of a non-idempotent
-  write, fire-and-forget or a batch that hides failed items
+  write or one that ignores the caller's cancellation, fire-and-forget or a
+  batch that hides failed items, a resource leaked when a step throws
 
 ### Throw vs return
 
@@ -61,6 +63,7 @@ Throw / raise when the operation cannot succeed and callers should not treat abs
 - Match the API contract to the failure mode: throwing means success is the only happy path; returning means missing is part of the type/contract.
 - Prefer the repo’s error types when throwing operational failures — don’t invent a one-off shape at the call site.
 - Don’t leak raw infrastructure messages (driver text, stacks, vendor bodies) in thrown/raised messages.
+- Return a `Result` type only when the repo already uses one — don’t add a second error channel next to thrown errors.
 
 See [throw-vs-return.md](references/throw-vs-return.md).
 
@@ -97,7 +100,7 @@ This shape stays in-process. Map it **once** at the edge. The client body is `co
 
 **Non-HTTP edges** (workers, queues, CLI) — same `kind` table, different signal; do not invent a parallel taxonomy. `malformed` / `validation` / `not_found` / `unauthenticated` / `forbidden` / `conflict` → fail without retry (CLI: non-zero exit; queue: dead-letter or drop per contract). `unavailable` → retry only when the work is transient and idempotent. `unexpected` → fail, log stack/`cause`, do not retry in a loop.
 
-Surface operational errors from services; map at the edge. Preserve `cause` when wrapping. Aggregate field errors — fail with one response that lists all issues.
+Surface operational errors from services; map at the edge. Preserve `cause` when wrapping — native `new Error(message, { cause })` when the repo has no app error class. Aggregate field errors — fail with one response that lists all issues.
 
 ### Where errors are handled
 
@@ -105,7 +108,7 @@ Surface operational errors from services; map at the edge. Preserve `cause` when
 - **Service** — surface operational errors; add context when wrapping
 - **Repository / ports** — translate store/upstream failures into typed app errors
 
-Transport signal only at the edge. Don’t wrap only to propagate unchanged. Clean up resources on failure paths.
+Transport signal only at the edge. Don’t wrap only to propagate unchanged. Clean up resources on every failure path — `try` / `finally` by default, `using` / `await using` when the resource implements dispose and the repo supports it. See [throw-vs-return.md](references/throw-vs-return.md).
 
 ### Client vs server surface
 
@@ -117,7 +120,7 @@ See [logging.md](references/logging.md).
 
 ### Upstream, retries, resilience
 
-Retry only transient, idempotent work (or writes with an idempotency key). Fail fast on `validation`, `unauthenticated`, `not_found`, `conflict`. Upstream failures become your own `unavailable` error, not the vendor body.
+Retry only transient, idempotent work (or writes with an idempotency key). Fail fast on `validation`, `unauthenticated`, `not_found`, `conflict`. Upstream failures become your own `unavailable` error, not the vendor body. Pass the caller's cancellation through, give each attempt its own timeout, and stop retrying once the caller aborted.
 
 Prefer a defined fallback over a hard internal failure when the product allows it — and always log that you degraded. Open a circuit when retries against an already-failing dependency would cascade.
 
@@ -125,7 +128,7 @@ See [retries.md](references/retries.md).
 
 ### Concurrent failure paths
 
-Every async task is awaited, joined, or owned by an explicit failure path — no unowned fire-and-forget. For batches, pick all-or-nothing or per-item **before** the loop; don’t drop failures and return the rest as full success.
+Every async task is awaited, joined, or owned by an explicit failure path — no unowned fire-and-forget. For batches, pick all-or-nothing or per-item **before** the loop; don’t drop failures and return the rest as full success. Per-item batches read every outcome from `Promise.allSettled` (or the language’s equivalent) instead of a hand-rolled catch per item.
 
 See [concurrent.md](references/concurrent.md).
 
@@ -145,7 +148,7 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| Throw vs return / required vs optional lookup | [throw-vs-return.md](references/throw-vs-return.md) |
-| Logging / cause chains / client vs server | [logging.md](references/logging.md) |
-| Retries / degradation / circuit breaker | [retries.md](references/retries.md) |
-| Unowned async / partial batch failures | [concurrent.md](references/concurrent.md) |
+| Throw vs return / required vs optional lookup / cleanup with `finally` / `using` / Result types | [throw-vs-return.md](references/throw-vs-return.md) |
+| Logging / cause chains / `cause` option / client vs server | [logging.md](references/logging.md) |
+| Retries / backoff / `AbortSignal` cancellation and timeouts / degradation / circuit breaker | [retries.md](references/retries.md) |
+| Unowned async / partial batch failures / `allSettled` | [concurrent.md](references/concurrent.md) |

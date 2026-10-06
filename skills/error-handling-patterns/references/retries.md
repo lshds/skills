@@ -25,6 +25,75 @@ export async function chargeOrder(orderId: string): Promise<Payment> {
 
 If you retry: bounded attempts, exponential backoff, jitter. Unbounded tight retries turn one slow dependency into a self-DoS.
 
+## Cancellation and timeouts
+
+A retry loop that ignores the caller's signal keeps calling the dependency after the request is gone, and an attempt without its own timeout can hang until the whole budget is spent. Pass the caller's `AbortSignal` through, bound each attempt with `AbortSignal.timeout(ms)`, combine both with `AbortSignal.any([signal, timeoutSignal])`, and stop once the caller aborted.
+
+```typescript
+const MAX_ATTEMPTS = 3
+const ATTEMPT_TIMEOUT_MS = 2_000
+
+// ❌ Incorrect: no caller signal, no per-attempt timeout — one hung attempt stalls the loop, and retries keep running after the caller left
+export async function fetchExchangeRates(): Promise<ExchangeRates> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
+      await waitForBackoff(attempt)
+    }
+
+    try {
+      return await requestExchangeRates()
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw new ApplicationError({
+    code: 'exchange_rates_unavailable',
+    kind: 'unavailable',
+    message: 'Exchange rates are unavailable',
+    cause: lastError,
+  })
+}
+
+// ✅ Correct: each attempt aborts on the caller's signal or its own timeout; a caller abort ends the loop
+export async function fetchExchangeRates(
+  signal: AbortSignal,
+): Promise<ExchangeRates> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
+      await waitForBackoff(attempt, signal)
+    }
+
+    try {
+      return await requestExchangeRates(
+        AbortSignal.any([signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)]),
+      )
+    } catch (error) {
+      if (signal.aborted) {
+        throw error
+      }
+
+      lastError = error
+    }
+  }
+
+  throw new ApplicationError({
+    code: 'exchange_rates_unavailable',
+    kind: 'unavailable',
+    message: 'Exchange rates are unavailable',
+    cause: lastError,
+  })
+}
+```
+
+- Create the timeout signal inside the loop. A timeout signal starts counting when it is created, so one shared across attempts is already aborted by the later ones.
+- A per-attempt timeout is a transient failure worth retrying; a caller abort is not — rethrow it instead of mapping it to `unavailable` or logging it as an upstream failure.
+- The backoff wait listens to the same signal, so a cancelled caller doesn't sleep through the delay.
+
 ## Degradation
 
 When the product can continue without the dependency, prefer a defined fallback over a hard internal failure. Always log the degradation — returning fallback data as fresh success hides the failure.
@@ -47,7 +116,7 @@ export async function listRecommendations(
 ): Promise<Recommendation[]> {
   try {
     return await fetchRecommendations(userId)
-  } catch (error: unknown) {
+  } catch (error) {
     logger.warn({
       code: 'recommendations_unavailable',
       kind: 'unavailable',

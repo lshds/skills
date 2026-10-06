@@ -8,7 +8,7 @@ Mixing client and server surfaces is how internals leak. Clients get `code` + sa
 
 ```typescript
 // ❌ Incorrect: driver text and id leak into the client message
-export function createUserNotFoundError(userId: string, error: unknown): never {
+export function throwUserNotFoundError(userId: string, error: unknown): never {
   throw new ApplicationError({
     code: 'user_not_found',
     kind: 'not_found',
@@ -17,7 +17,7 @@ export function createUserNotFoundError(userId: string, error: unknown): never {
 }
 
 // ✅ Correct: stable code; safe message; id stays in logs
-export function createUserNotFoundError(userId: string, error: unknown): never {
+export function throwUserNotFoundError(userId: string, error: unknown): never {
   throw new ApplicationError({
     code: 'user_not_found',
     kind: 'not_found',
@@ -53,9 +53,15 @@ export function wrapUpstreamError(error: unknown): never {
     cause: error,
   })
 }
+
+// ✅ Correct: no application error class in this repo — the native cause option keeps the chain
+export function wrapUpstreamError(error: unknown): never {
+  throw new Error('Order could not be completed', { cause: error })
+}
 ```
 
 - Wrap when you add context the caller doesn’t have. Don’t wrap only to rethrow the same failure unchanged — propagate as-is.
+- Without an application error class, use `new Error(message, { cause: error })` — not `` `${message}: ${String(error)}` ``, which flattens the root error into text.
 
 ## Log once
 
@@ -66,7 +72,7 @@ Log at the boundary that owns the decision — usually the edge that maps to tra
 export async function createOrder(orderInput: CreateOrderInput): Promise<Order> {
   try {
     return await saveOrder(orderInput)
-  } catch (error: unknown) {
+  } catch (error) {
     logger.error(error)
     return emptyOrder
   }
