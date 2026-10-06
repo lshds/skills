@@ -18,8 +18,7 @@ options. Prefer inference over silencing the typechecker.
 
 **Domain:** TypeScript language rules in `.ts` and type-only `.tsx`.
 **Owns:** naming, typing, immutability, escape hatches, imports, functions,
-control flow, async composition, JSDoc, tsconfig compiler options and TS 6 → 7
-differences.
+control flow, async composition, JSDoc, and tsconfig compiler options.
 **Does not own:** bundler and lint configuration.
 
 ## When to activate
@@ -29,7 +28,7 @@ differences.
 - Replacing `any` / unsafe `as` / `!`, or fixing naming and imports
 - Reshaping async waterfalls, control flow, or redundant annotations
 - Adding or reviewing JSDoc / TSDoc on exports
-- Writing or reviewing `tsconfig.json`, or checking a config against TypeScript 7
+- Writing or reviewing `tsconfig.json`
 
 ## Core Concepts
 
@@ -116,7 +115,7 @@ TS 6.0 is the baseline: write a tsconfig with no deprecated options and no `igno
 | `value === null \|\| value === undefined` / `null \| undefined` inside | Convert `null` at the boundary; inside, one missing value — `undefined` unless the receiving API gives `null` a meaning |
 | `// Check if user exists` above `if (!user)` | No comment — or the reason the code can’t show |
 | `.sort()` on a prop or shared array | `toSorted()` (lib ES2023+) |
-| `ignoreDeprecations` to silence TS 6.0 deprecations | Replace the deprecated option — TS 7 rejects it |
+| `ignoreDeprecations` to silence a deprecation | Replace the deprecated option |
 
 ## Practice areas
 
