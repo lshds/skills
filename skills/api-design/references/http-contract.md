@@ -1,6 +1,6 @@
 # HTTP Contract
 
-Prefer noun resource URLs and a `data` / `errors` envelope with real HTTP status codes over verb paths and `200` + `{ success: false }`, so clients can branch on status and share one wire shape. Greenfield uses the shapes below; a mature flat or alternate envelope stays that shape. Spec and HTML docs tools live in sibling files — this file is the wire contract.
+Prefer noun resource URLs and a `data` / `errors` envelope with real HTTP status codes over verb paths and `200` + `{ success: false }`, so clients can branch on status and share one wire shape. Greenfield uses the shapes below; a mature flat or alternate envelope — including RFC 9457 problem details — stays that shape. This is the wire contract itself, not how a spec or docs page describes it.
 
 ## Resource URLs
 
@@ -214,12 +214,17 @@ POST /api/v1/purchase-orders
 POST /api/v1/purchase-orders
 # 201 id=1 then 201 id=2
 
-# ✅ Correct: same Idempotency-Key returns the first result
+# ✅ Correct: the replay with the same Idempotency-Key returns the first response
 POST /api/v1/purchase-orders
 Idempotency-Key: 8f3c-q4-supplies
-# replay → same body and id=1
+# 201 id=1
+POST /api/v1/purchase-orders
+Idempotency-Key: 8f3c-q4-supplies
+# replay → the same 201, body, and id=1; no second row
 ```
 
+- Accept `Idempotency-Key` on every unsafe POST a client may retry. A replay with the same key returns the first response — same status, body, and `id` — never a second row.
+- `Idempotency-Key` is an IETF draft, not yet an RFC. When the repo already implements it, keep its header name and replay behavior.
 - GET/PUT/DELETE are idempotent by HTTP. Design PATCH to be idempotent when practical.
 
 ## Bulk
@@ -293,3 +298,37 @@ Removing a field on v1 breaks every shipped client that still reads it; adding a
 - Prefer URL version `/api/v1/purchase-orders`. Bump to v2 only for breaking changes; keep v1 through a documented deprecation window.
 - Non-breaking (stay on v1): add optional fields, query params, or new endpoints.
 - Breaking: remove or rename fields, change types or defaults, tighten required validation, or change URL structure.
+
+## Keep existing problem details
+
+Greenfield errors use the `errors[]` envelope above. When the repo already returns RFC 9457 problem details (`application/problem+json`), keep that media type and its members — one endpoint that switches to `errors[]` breaks every client that reads `type` and `status` from the rest of the API. RFC 9457 obsoletes RFC 7807 with the same shape.
+
+```jsonc
+// ❌ Incorrect: a new endpoint in a problem+json API returns the house errors[] envelope — clients that read type / status find neither
+// Content-Type: application/json
+{
+  "errors": [
+    {
+      "status": "422",
+      "code": "invalid_format",
+      "title": "Invalid Attribute",
+      "detail": "Name cannot be blank"
+    }
+  ]
+}
+
+// ✅ Correct: the same media type and members as the rest of the API
+// Content-Type: application/problem+json
+{
+  "type": "https://api.example.com/problems/invalid-attribute",
+  "title": "Invalid Attribute",
+  "status": 422,
+  "detail": "Name cannot be blank",
+  "instance": "/api/v1/purchase-orders/1"
+}
+```
+
+- `type` is a URI naming the kind of problem (`about:blank` when omitted). `title` is its short summary and stays the same across occurrences. `detail` explains this occurrence; `instance` identifies it.
+- `status` is a JSON number here, unlike the string `status` in `errors[]`. It is advisory — the HTTP status on the response is still the one clients branch on, and the two must match.
+- Add extra data as extension members beside the standard ones — for example a list of field errors, each with `detail` and `pointer`. Don't rename or drop the standard members.
+- Don't run both envelopes on one API. Moving from one to the other is a breaking change.

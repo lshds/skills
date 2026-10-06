@@ -12,7 +12,7 @@ import { createApiReference } from '@scalar/api-reference'
 // ❌ Incorrect: inline spec string that will not match the live file
 createApiReference('#app', {
   content: `{
-    "openapi": "3.0.3",
+    "openapi": "3.1.0",
     "info": { "title": "Purchase orders", "version": "1.0.0" },
     "paths": {
       "/api/v1/purchase-orders/{id}": {
@@ -47,7 +47,7 @@ createApiReference('#app', {
 - Do not add Scalar if the repo has no docs page yet, or if Redoc is already that page.
 - The spec at `url` uses kebab-case paths (`/api/v1/purchase-orders`) and camelCase `operationId` / JSON fields (`getPurchaseOrder`, `paidAt`). The path parameter matches the URL (`id`).
 - `sources[].slug` is kebab-case (`purchase-orders`), same as the path.
-- `sources` is for multiple public specs. Do not add an admin or internal spec on the public docs page.
+- `sources` lists several specs on one page. Mark the one that opens first with `default: true`.
 
 ## Option names
 
@@ -68,79 +68,34 @@ createApiReference('#app', {
 createApiReference('#app', {
   url: '/openapi.json',
   showOperationId: true,
-  hideModels: false,
+  hideModels: true,
   layout: 'modern',
 })
 ```
 
-- Known keys include `url`, `sources`, `layout`, `showOperationId`, `hideModels`.
+- Known keys include `url`, `sources`, `layout`, `showOperationId`, `hideModels`, `documentDownloadType`, `persistAuth`.
 - Leave `layout` as `'modern'` unless the repo already uses `'classic'`.
 - `showOperationId` defaults to `false`. Set `true` only when you want the id on the page.
+- Scalar hides the download button with `documentDownloadType: 'none'` (older releases: `hideDownloadButton: true`). Don't copy Redoc's plural `hideDownloadButtons` — Scalar ignores it.
+- Hiding the download button, or an operation with `x-scalar-ignore: true` in the spec, changes only what the page shows. It is not access control — anyone can still fetch the spec URL.
 
 ## Auth in the browser
 
-`persistAuth: true` stores tokens in `localStorage` after reload. Hiding an operation in the UI does not remove it from the spec URL. Keep admin paths out of the file this page loads, and do not put secrets in environment defaults.
+`persistAuth: true` keeps the credentials a reader enters in `localStorage`, so they survive reloads and stay in that browser for whoever uses it next.
 
-```yaml
-# ❌ Incorrect: persistAuth true; spec has a token default and lists admin refund
-# createApiReference('#app', { url: '/openapi.json', persistAuth: true })
-openapi: "3.0.3"
-info:
-  title: Purchase orders
-  version: "1.0.0"
-x-scalar-environments:
-  production:
-    variables:
-      accessToken:
-        default: "sk_live_4f2a91c8e0b3"
-paths:
-  /api/v1/purchase-orders/{id}:
-    get:
-      operationId: getPurchaseOrder
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The order
-  /api/v1/admin/purchase-orders/{id}/refund:
-    post:
-      operationId: refundPurchaseOrder
-      x-scalar-ignore: true
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Refunded
+```typescript
+import { createApiReference } from '@scalar/api-reference'
 
-# ✅ Correct: persistAuth false; public spec only; no token default
-# createApiReference('#app', { url: '/openapi.json', persistAuth: false })
-openapi: "3.0.3"
-info:
-  title: Purchase orders
-  version: "1.0.0"
-paths:
-  /api/v1/purchase-orders/{id}:
-    get:
-      operationId: getPurchaseOrder
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The order
+// ❌ Incorrect: persistAuth on a shared docs page — the access token outlives the session in localStorage
+createApiReference('#app', {
+  url: '/openapi.json',
+  persistAuth: true,
+})
+
+// ✅ Correct: persistAuth left at its default (false) — the token is gone after a reload
+createApiReference('#app', {
+  url: '/openapi.json',
+})
 ```
 
 - `persistAuth` defaults to `false`. Set `true` only when tokens should survive reload.
-- `x-scalar-ignore` only hides an operation in the Scalar UI. Anyone can still fetch the spec URL.
-- Do not put tokens, webhook secrets, or internal hostnames in `x-scalar-environments` defaults or examples.

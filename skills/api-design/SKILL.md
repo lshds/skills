@@ -6,8 +6,8 @@ description: >-
   or OpenAPI-shaped contracts to ensure a consistent wire contract. Prefer
   one envelope style and real HTTP status codes. Triggers on resource URLs,
   HTTP methods, status codes, pagination, filtering, error envelopes,
-  idempotency, versioning, REST-y routes, partner/public APIs, breaking
-  changes, or API documentation (OpenAPI, Redoc, Scalar).
+  problem details, idempotency, versioning, REST-y routes, partner/public
+  APIs, breaking changes, or API documentation (OpenAPI, Redoc, Scalar).
 ---
 
 # API Design
@@ -47,9 +47,25 @@ placement, or auth implementation — cover only how outcomes appear on the wire
 
 ### Match the repo
 
-Follow the envelope, casing, and docs stack already in the tree. Greenfield uses
-the resource envelope in [http-contract.md](references/http-contract.md). Don’t
-invent a second envelope beside a mature API.
+Read installed versions from `package.json` and the lockfile (plus the OpenAPI
+spec file and the docs tool config). Follow the patterns already in the tree;
+greenfield defaults apply only where nothing contradicts them. When code lags
+behind what the installed version supports, finish the task in the existing
+style, then propose the migration once — old → new, why, file count, risk — and
+wait for a yes. Never fold it into the current change. In review, report the gap
+as a finding instead.
+
+Keep the envelope, casing, and docs tool already in the tree. Review a flat or
+alternate envelope against its own shape: don’t force `type` / `attributes` onto
+a mature API, and don’t invent a second envelope beside it. Greenfield uses the
+resource envelope in [http-contract.md](references/http-contract.md).
+
+Version signals:
+
+- `openapi: "3.0.3"` → `openapi: "3.1.0"` (when every tool that reads the spec supports 3.1; Redoc and Scalar render it)
+- `nullable: true` → `type: [string, "null"]` (OpenAPI 3.1 / JSON Schema 2020-12)
+- schema-level `example: 120.5` → `examples: [120.5]` (OpenAPI 3.1)
+- problem details documented against RFC 7807 → RFC 9457 (same shape; 9457 obsoletes 7807)
 
 ### Resource design
 
@@ -97,7 +113,10 @@ JSON:API-inspired subset: `data` / `type` / `id` / `attributes` / `errors` /
 content types. One contract for writes, success, and errors
 (`Content-Type: application/json`). POST omits `id`; PATCH sends `id` plus
 changed attributes; PUT sends `id` plus the full set. Never both `data` and
-`errors`. Worked envelopes: [http-contract.md](references/http-contract.md).
+`errors`. The main alternative a repo may already use is RFC 9457 problem
+details (`application/problem+json` with `type` / `title` / `status` / `detail` /
+`instance`); when it does, keep that shape instead of adding `errors[]`. Worked
+envelopes: [http-contract.md](references/http-contract.md).
 
 ### Pagination & query
 
@@ -107,9 +126,10 @@ with an `id` tie-break. See [http-contract.md](references/http-contract.md).
 
 ### Idempotency, bulk, auth
 
-GET/PUT/DELETE are idempotent by HTTP; unsafe POST accepts `Idempotency-Key`. Bulk
-is a collection `/batch` with a max size and per-item errors. Wire auth is
-`Authorization` and `401`/`403`. See [http-contract.md](references/http-contract.md).
+GET/PUT/DELETE are idempotent by HTTP; unsafe POST accepts `Idempotency-Key` (an
+IETF draft), and a replay returns the first response. Bulk is a collection
+`/batch` with a max size and per-item errors. Wire auth is `Authorization` and
+`401`/`403`. See [http-contract.md](references/http-contract.md).
 
 ### Versioning
 
@@ -120,7 +140,9 @@ stay on v1. See [http-contract.md](references/http-contract.md).
 
 If they already exist (e.g. OpenAPI, Redoc, Scalar), keep them next to the
 routes. Names, tags, and examples must match the live API. Do not create any
-unless the user asked or confirmed.
+unless the user asked or confirmed. Greenfield specs use `openapi: "3.1.0"`. The
+public spec holds only what customers call — hiding an operation or the download
+button in the docs UI does not make it private.
 
 ### Common mistakes
 
@@ -133,6 +155,7 @@ unless the user asked or confirmed.
 | 404 for empty list | 200 + `data: []` |
 | Deep `/a/:id/b/:id/c/:id` trees | Shallow nesting or top-level resources with filters |
 | Forcing JSON:API nesting on a mature flat API | Match repo envelope; fix status/naming first |
+| `errors[]` on a new endpoint of a `problem+json` API | `application/problem+json` with the same members as the rest of the API |
 
 ## Output Format
 
@@ -161,7 +184,7 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| Resource URLs / envelopes / status / pagination / versioning | [http-contract.md](references/http-contract.md) |
-| OpenAPI spec / names / tags / writes / errors / pagination | [openapi.md](references/openapi.md) |
-| Redoc / OpenAPI HTML docs | [redoc.md](references/redoc.md) |
-| Scalar / OpenAPI API reference | [scalar.md](references/scalar.md) |
+| Resource URLs / envelopes / status / problem+json / RFC 9457 / pagination / Idempotency-Key / bulk / versioning | [http-contract.md](references/http-contract.md) |
+| OpenAPI 3.1 spec / `components` / `nullable` / names / tags / writes / errors / Idempotency-Key / deprecation / public vs internal | [openapi.md](references/openapi.md) |
+| Redoc / OpenAPI HTML docs / option casing / `hideDownloadButtons` / `x-tagGroups` | [redoc.md](references/redoc.md) |
+| Scalar / API reference / spec `url` / `sources` / option names / `persistAuth` | [scalar.md](references/scalar.md) |

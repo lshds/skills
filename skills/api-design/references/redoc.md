@@ -23,8 +23,9 @@ The HTML `<redoc>` tag reads kebab-case attributes. `Redoc.init` and `redocly.ya
 ```
 
 ```typescript
-const container = document.getElementById('redoc')
-if (!container) {
+const redocContainer = document.getElementById('redoc')
+
+if (!redocContainer) {
   throw new Error('Missing #redoc')
 }
 
@@ -35,7 +36,7 @@ Redoc.init(
     'scroll-y-offset': 64,
     'hide-download-buttons': true,
   },
-  container,
+  redocContainer,
 )
 
 // ✅ Correct: camelCase keys in the init object
@@ -45,7 +46,7 @@ Redoc.init(
     scrollYOffset: 64,
     hideDownloadButtons: true,
   },
-  container,
+  redocContainer,
 )
 ```
 
@@ -63,6 +64,7 @@ openapi:
 
 - HTML element: kebab-case (`spec-url`, `scroll-y-offset`, `hide-download-buttons`).
 - `Redoc.init` and `redocly.yaml`: camelCase (`scrollYOffset`, `hideDownloadButtons`).
+- The download option is plural, `hideDownloadButtons`; the singular `hideDownloadButton` is the deprecated name. It only hides the button — it is not access control, and anyone can still fetch the spec URL.
 - Set options in `redocly.yaml` or in `Redoc.init`, not both with different values.
 - Set only the options you need. Do not paste a full theme. Keep the file the repo already has.
 - Do not add Redoc if the repo has no docs page yet, or if Scalar is already that page.
@@ -73,7 +75,7 @@ The sidebar is built from `tags`. If you add `x-tagGroups` and leave a tag out o
 
 ```yaml
 # ❌ Incorrect: Payments is used but missing from x-tagGroups, so it is hidden
-openapi: "3.0.3"
+openapi: "3.1.0"
 info:
   title: Shop
   version: "1.0.0"
@@ -103,7 +105,7 @@ paths:
           description: Payment list
 
 # ✅ Correct: every tag is in a group
-openapi: "3.0.3"
+openapi: "3.1.0"
 info:
   title: Shop
   version: "1.0.0"
@@ -137,63 +139,3 @@ paths:
 - List tags under root `tags`. Put at least one tag on every operation.
 - Tag order in the file is the menu order. Do not set `sortTagsAlphabetically: true` if that order is the menu you want.
 - Skip `x-tagGroups` unless the menu needs groups. If you use it, put every tag in a group.
-
-## Hide download is not private
-
-`hideDownloadButtons: true` only hides the button. Anyone can still fetch the spec URL. Admin paths and internal fields in that file are still public.
-
-```yaml
-# ❌ Incorrect: download is hidden, but the spec Redoc loads still has admin refund
-# Redoc.init('/openapi.json', { hideDownloadButtons: true }, document.getElementById('redoc'))
-openapi: "3.0.3"
-info:
-  title: Orders
-  version: "1.0.0"
-paths:
-  /api/v1/orders/{id}:
-    get:
-      operationId: getOrder
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The order
-  /api/v1/admin/orders/{id}/refund:
-    post:
-      operationId: refundOrder
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Refunded
-
-# ✅ Correct: the spec Redoc loads has only customer paths
-openapi: "3.0.3"
-info:
-  title: Orders
-  version: "1.0.0"
-paths:
-  /api/v1/orders/{id}:
-    get:
-      operationId: getOrder
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: The order
-```
-
-- `hideDownloadButtons` is optional. It does not make the spec private.
-- Keep admin paths and internal fields out of the file Redoc points at.
