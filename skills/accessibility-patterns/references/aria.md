@@ -11,13 +11,15 @@ there is no visible name. Use `aria-describedby` for supplement, not as the name
 ```html
 <!-- ❌ Incorrect: aria-label on a div with no role; icon button unnamed -->
 <div aria-label="Delete item">
-  <svg>…</svg>
+  <svg viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M7 7l1 13h8l1-13" /></svg>
 </div>
-<button type="button"><svg>…</svg></button>
+<button type="button">
+  <svg viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M7 7l1 13h8l1-13" /></svg>
+</button>
 
 <!-- ✅ Correct: name a real control; hide decorative graphics -->
 <button type="button" aria-label="Delete item">
-  <svg aria-hidden="true">…</svg>
+  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M7 7l1 13h8l1-13" /></svg>
 </button>
 
 <section aria-labelledby="orders-heading">
@@ -35,13 +37,17 @@ collapsed content so it leaves the a11y tree.
 ```html
 <!-- ❌ Incorrect: clickable heading, no expanded/controls, panel always in tree -->
 <h3 onclick="toggle()">Shipping details</h3>
-<div id="panel-1">…</div>
+<div id="panel-1">
+  <p>Ships in 2–3 business days.</p>
+</div>
 
 <!-- ✅ Correct: button + expanded + controls + hidden when collapsed -->
 <button type="button" aria-expanded="false" aria-controls="panel-1">
   Shipping details
 </button>
-<div id="panel-1" hidden>…</div>
+<div id="panel-1" hidden>
+  <p>Ships in 2–3 business days.</p>
+</div>
 ```
 
 ## Tabs
@@ -129,6 +135,43 @@ Arrows move; Enter/Space activate; Escape closes and returns focus to the opener
   <button type="button" role="menuitem">Delete</button>
 </div>
 ```
+
+## Dragging has a single-pointer alternative
+
+Drag-to-reorder lists and drag-only sliders shut out people who can’t hold a
+pointer down while moving it, and keyboard users entirely (WCAG 2.5.7). Pair
+every drag with single-pointer controls — click or tap, no path — that are
+also keyboard operable.
+
+```html
+<!-- ❌ Incorrect: dragging is the only way to reorder -->
+<ol class="priority-list">
+  <li draggable="true">Fix checkout bug</li>
+  <li draggable="true">Update pricing page</li>
+</ol>
+
+<!-- ✅ Correct: Move up / Move down buttons beside the drag handle, named with the item -->
+<ol class="priority-list">
+  <li draggable="true">
+    <span id="task-checkout">Fix checkout bug</span>
+    <button type="button" id="task-checkout-up" aria-labelledby="task-checkout-up task-checkout">Move up</button>
+    <button type="button" id="task-checkout-down" aria-labelledby="task-checkout-down task-checkout">Move down</button>
+  </li>
+  <li draggable="true">
+    <span id="task-pricing">Update pricing page</span>
+    <button type="button" id="task-pricing-up" aria-labelledby="task-pricing-up task-pricing">Move up</button>
+    <button type="button" id="task-pricing-down" aria-labelledby="task-pricing-down task-pricing">Move down</button>
+  </li>
+</ol>
+<div role="status" aria-live="polite"></div>
+```
+
+- After a move, keep focus on the moved item’s button and announce the new
+  position in the polite status region (“Fix checkout bug moved to position 2”).
+- Sliders: prefer native `<input type="range">`; a custom slider moves the
+  thumb on a track click and steps with arrow keys.
+- Dragging without an alternative is OK only when the movement itself is the
+  input (freehand drawing, a signature pad).
 
 ## Live regions
 
