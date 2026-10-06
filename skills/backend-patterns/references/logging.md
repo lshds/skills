@@ -14,9 +14,11 @@ export async function completeCheckout(
 ): Promise<Order> {
   const startedAt = Date.now()
   const order = await saveOrder(checkout)
+
   logger.info(
     `order ${order.id} created in ${Date.now() - startedAt}ms ${JSON.stringify(checkout)}`,
   )
+
   return order
 }
 
@@ -42,27 +44,10 @@ export async function completeCheckout(
 
 ## Levels
 
-`info` when the request did the normal thing. `warn` when it still worked but something was off. For example: cache miss then a live fetch, or a save that was slow but worked. Don’t `warn` a happy path.
+`info` when the request did the normal thing — a cache hit, or a cache miss followed by a live fetch. `warn` when it still worked but on a fallback or degraded path: a stale copy served because the live fetch failed, or a save that was slow but worked. Don’t `warn` a normal path, or every cold cache key looks like an incident.
 
 ```typescript
-// ❌ Incorrect: warn for a normal cache hit
-export async function loadCatalog(
-  logger: Logger,
-  catalogId: string,
-): Promise<Catalog> {
-  const cachedCatalog = await readCatalogCache(catalogId)
-
-  if (cachedCatalog) {
-    logger.warn({ event: 'catalog_cache_hit', catalogId })
-    return cachedCatalog
-  }
-
-  const catalog = await fetchCatalog(catalogId)
-  logger.info({ event: 'catalog_cache_miss', catalogId })
-  return catalog
-}
-
-// ✅ Correct: info on the hit; warn when you had to fetch after a miss
+// ❌ Incorrect: warn on a normal cache miss; the stale fallback hides at info
 export async function loadCatalog(
   logger: Logger,
   catalogId: string,
@@ -74,11 +59,48 @@ export async function loadCatalog(
     return cachedCatalog
   }
 
-  const catalog = await fetchCatalog(catalogId)
-
   logger.warn({ event: 'catalog_cache_miss', catalogId })
 
-  return catalog
+  try {
+    return await fetchCatalog(catalogId)
+  } catch (error) {
+    const staleCatalog = await readStaleCatalog(catalogId)
+
+    if (!staleCatalog) {
+      throw error
+    }
+
+    logger.info({ event: 'catalog_served_stale', catalogId })
+    return staleCatalog
+  }
+}
+
+// ✅ Correct: info on a normal miss; warn only when the fetch failed and a stale copy was served
+export async function loadCatalog(
+  logger: Logger,
+  catalogId: string,
+): Promise<Catalog> {
+  const cachedCatalog = await readCatalogCache(catalogId)
+
+  if (cachedCatalog) {
+    logger.info({ event: 'catalog_cache_hit', catalogId })
+    return cachedCatalog
+  }
+
+  logger.info({ event: 'catalog_cache_miss', catalogId })
+
+  try {
+    return await fetchCatalog(catalogId)
+  } catch (error) {
+    const staleCatalog = await readStaleCatalog(catalogId)
+
+    if (!staleCatalog) {
+      throw error
+    }
+
+    logger.warn({ event: 'catalog_served_stale', catalogId })
+    return staleCatalog
+  }
 }
 ```
 
@@ -98,6 +120,7 @@ export async function createOrder(
   }
 
   logger.error({ event: 'order_created', orderId: order.id })
+
   return order
 }
 
@@ -133,7 +156,9 @@ export async function createOrder(
   orderInput: CreateOrderInput,
 ): Promise<Order> {
   const order = await saveOrder(orderInput)
+
   logger.info({ event: 'order_created', orderId: order.id })
+
   return order
 }
 
@@ -164,8 +189,10 @@ export async function createOrder(
   orderInput: CreateOrderInput,
 ): Promise<Order> {
   const order = await saveOrder(orderInput)
+
   console.log('order_created', order.id)
   debug('order %s saved', order.id)
+
   return order
 }
 
