@@ -95,6 +95,10 @@ not, search stays Grep/Glob/Read/explore — absence is not an error.
 
 ## Extending
 
+Versioned skills carry a `Match the repo` block with Version signals: when code
+lags behind the installed version, the agent finishes the task in the existing
+style and proposes the migration for approval instead of applying it silently.
+
 New agents, skills, and references follow [TEMPLATE.md](TEMPLATE.md). Copy a
 `_template_*.md` file, fill the placeholders, then delete leftover comments,
 unused optional sections, and the Example.

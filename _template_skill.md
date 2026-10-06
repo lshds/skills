@@ -15,6 +15,8 @@
      may push past 200 — don’t cut it to hit the range. Don’t paste JSON or
      code catalogs here; that is the reference file’s job. One short fence
      with a language tag is OK when the default will not fit in prose.
+     Code in fences and inline snippets follows skills/typescript-standards
+     (and skills/react-patterns for React), like reference examples do.
      After shipping: one Practice areas row per new reference; a Skill
      index row on the owning agent; a README row if the skill is new.
 
@@ -64,9 +66,16 @@
      before Core Concepts.
 
      Optional ### Match the repo when greenfield defaults differ from
-     brownfield. Follow the existing stack; apply the greenfield default
-     only when the tree does not contradict it; ask before migrating.
-     Rename the heading when the rule is more specific (Generation).
+     brownfield, or when the stack has versions whose patterns change.
+     Follow the existing stack; apply the greenfield default only when the
+     tree does not contradict it. When code lags behind the installed
+     version: finish the task in the existing style, then propose the
+     migration once and wait for approval. Add “Version signals” — 3–6
+     bullets `old` → `new` (version that enables it) — when the skill
+     covers a versioned framework, tool, or language. Signals name only
+     what the installed version already supports: no new packages, no
+     version bumps, no RC / canary APIs. Rename the heading when the rule
+     is more specific (Generation).
 
      Common mistakes: optional table. Same scenario, different choice.
      Last ### under Core Concepts. Delete the subsection if empty.
@@ -136,9 +145,19 @@ description: >-
 
 ### Match the repo
 
-Follow the stack and helpers already in the tree. Apply the greenfield
-default only when nothing contradicts it. If you find an older way to
-do the same work, say so and ask before replacing it.
+Read installed versions from `package.json` and the lockfile (plus the
+stack's own config). Follow the patterns already in the tree; greenfield
+defaults apply only where nothing contradicts them. When code lags behind
+what the installed version supports, finish the task in the existing
+style, then propose the migration once — old → new, why, file count,
+risk — and wait for a yes. Never fold it into the current change. In
+review, report the gap as a finding instead.
+
+Version signals:
+
+- `[old pattern]` → `[new pattern]` ([version that enables it])
+- `[old pattern]` → `[new pattern]` ([version that enables it])
+- `[old pattern]` → `[new pattern]` ([version that enables it])
 -->
 
 ## Core Concepts

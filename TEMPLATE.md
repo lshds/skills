@@ -16,7 +16,7 @@ When a skill is ready for use, add a row to the right agent's Skill index, and u
 
 1. Copy [`_template_skill.md`](_template_skill.md) → `skills/<name>/SKILL.md`
 2. Fill frontmatter (`This skill should be used when … to ensure …`, not `Use when`), intro, Domain (almost always), When to activate, and Core Concepts
-3. Add a mode `###` when the skill both writes and reviews (Write vs review, or Write vs audit / Place vs blueprint / Design vs review). Add `### Match the repo` when greenfield defaults differ from brownfield
+3. Add a mode `###` when the skill both writes and reviews (Write vs review, or Write vs audit / Place vs blueprint / Design vs review). Add `### Match the repo` when greenfield defaults differ from brownfield; for versioned frameworks, tools, or languages, include 3–6 Version signals (`old` → `new`, gated on the installed version) so the agent proposes migrations instead of applying them silently
 4. Optional Workflow, then optional Output Format, then Practice areas last. Delete unused optional sections, author comments, and the Example — ship only filled content
 5. If you add files under `references/`, list them in Practice areas (`Area` = searchable words)
 
@@ -24,5 +24,6 @@ When a skill is ready for use, add a row to the right agent's Skill index, and u
 
 1. Copy [`_template_reference.md`](_template_reference.md) → `skills/<name>/references/<topic>.md`
 2. Duplicate the `##` block for each section; fill placeholders; pick the code-block language from the snippet
-3. Delete the author comments and the Example block — ship only filled content
-4. Link it from the skill's Practice areas table
+3. Write TypeScript / TSX / JS examples to `typescript-standards` (and React examples to `react-patterns`) — names, function shape, control flow, typing, imports. A ❌ block breaks only the rule it demonstrates
+4. Delete the author comments and the Example block — ship only filled content
+5. Link it from the skill's Practice areas table

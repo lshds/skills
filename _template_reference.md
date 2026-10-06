@@ -56,6 +56,14 @@
      Include the imports, types, and names the snippet needs to stand alone.
      Identifiers should reveal intent (no `foo`, `data`, `tmp`).
      Full concrete snippets — no “etc.”, “…”, or truncated bodies.
+     TypeScript / TSX / JS snippets follow skills/typescript-standards —
+     naming, function shape, control flow (blank line before guards and the
+     happy-path return, missing-value checks, `??`, no `continue`), typing,
+     and imports. React snippets also follow skills/react-patterns —
+     `export function` components, a `…Props` interface destructured in the
+     signature, `on…` props / `handle…` handlers, defaults in the signature,
+     `return null`, stable keys. A ❌ block breaks only the rule it
+     demonstrates; everything else in it follows these conventions.
 
      List: rules that need no snippet. One bullet = one rule, in enough
      detail that the agent can apply it (what to do, and what fails if you
