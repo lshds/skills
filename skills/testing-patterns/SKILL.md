@@ -60,13 +60,12 @@ Keep the repo’s runner, test environment (jsdom, happy-dom, or Browser Mode),
 Version signals:
 
 - `userEvent.click(button)` → `const user = userEvent.setup(); await user.click(button)`
-  (user-event 14)
-- `act` from `react-dom/test-utils` → `act` from `react` (React 19)
+- `act` from `react-dom/test-utils` → `act` from `react`
 - `browser.provider: 'playwright'` + `@vitest/browser/context` → `provider: playwright()`
-  from `@vitest/browser-playwright` + `vitest/browser` (Vitest 4)
-- MSW `rest.get` + `res(ctx.json())` → `http.get` + `HttpResponse.json()` (MSW 2)
+  from `@vitest/browser-playwright` + `vitest/browser`
+- MSW `rest.get` + `res(ctx.json())` → `http.get` + `HttpResponse.json()`
 - `page.waitForTimeout(5_000)` / `page.$(selector)` → web-first `expect(locator)`
-  assertions + `getByRole` (Playwright)
+  assertions + `getByRole`
 
 Switching test frameworks (Jest ↔ Vitest) is never proposed as modernization.
 
