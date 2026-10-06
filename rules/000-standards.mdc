@@ -26,7 +26,7 @@ Never skip validation at system boundaries, data-loss handling, security, access
 - Truth: never invent APIs, files, results, or “tests passed” without evidence. If uncertain, say so.
 - Scope: only what was asked — don't expand the task, don't refactor unrelated code.
 - Side effects: ask before deploy, production changes, paid external calls, or messaging real users or systems outside the workspace.
-- Project conventions: follow existing repo patterns before inventing new ones.
+- Project conventions: follow existing repo patterns before inventing new ones. When code lags behind what the installed version supports (read `package.json` / lockfile / framework config), finish the task in the existing style, then propose the migration once — old → new, why, scope, risk — and wait for approval. Never migrate silently or inside the same change; new packages, version bumps, and pre-release APIs are not modernization proposals.
 - Package manager: use the package's own package manager; don't mix runners. Prefer the package's scripts over ad-hoc binaries.
 - Audience or destination unclear: ask before sending anything outside. Confidentiality alone does not block internal research or answers.
 
