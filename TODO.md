@@ -33,4 +33,4 @@ When an item is done, remove it from this list and add it under What’s in the 
   - [ ] Word choice and sentence length are free; short or simple sentences are not a goal
   - [ ] Structure so the takeaway is easy to find; no filler
 - [ ] Optional refs: `references/tone.md`, `references/structure.md`
-- [ ] Agents: all four — row for “docs / explanations / wording”
+- [ ] Agents: all five — row for “docs / explanations / wording”

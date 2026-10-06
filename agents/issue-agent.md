@@ -45,7 +45,7 @@ New ticket → Create. Mid-flight edits to an existing ticket → Update. Neithe
 
 ### Plan
 - Short plan from Task + Acceptance Criteria (and Context that matters); note deps/risks if non-trivial.
-- Propose the specialist for Implement (do not route): UI / client → frontend; API / services → backend; schema / migrations / SQL → database; mixed → say the split and order. Unclear → ask once.
+- Propose the specialist for Implement (do not route): web UI / client → frontend; Expo / React Native → mobile; API / services → backend; schema / migrations / SQL → database; mixed → say the split and order. Unclear → ask once.
 - Do not design UI or API here — only the handoff brief (Task + Acceptance Criteria + relevant Context + plan outline).
 - Hand back to Supervisor with the proposed specialist(s) and brief.
 

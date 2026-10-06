@@ -20,24 +20,25 @@ APIs, TypeScript services, validation, and HTTP contracts.
 
 ## Skills
 
-Load only what the task needs (smallest set):
+Load only what the task needs (smallest set): combine the matching stack rows with the matching cross-cutting rows.
 
-| When | Skills |
+| Stack | Skills |
 | --- | --- |
-| Request path (async I/O, validation placement, cache, hoist, post-response, job offload, light failure/data hygiene) | `backend-patterns` |
-| Logs (fields, levels, request id) | `backend-patterns` |
-| Environment | `backend-patterns` |
-| Error paths, mapping, retries, degradation, unowned async / partial-batch, throw vs return | `error-handling-patterns` |
-| Deep query hygiene / transactions / HTTP-in-transaction / ORM (beyond a hot-path spot-check) | `database-patterns` (+ `backend-patterns` when request-thread I/O, validation placement, or handler spot-check is also in scope). Schema / migrations / seeds → hand back for Database. |
-| Access control, tokens, roles, ownership | `security-patterns` |
-| Lockfile / dependency audit / install scripts / trustedDependencies / allowBuilds | `security-patterns` |
-| TypeScript server code (`.ts` APIs, services, validation, async) | `typescript-standards` |
-| Mutating handlers (authz inside entry point) | `security-patterns` (+ `typescript-standards` when writing the `.ts`) |
-| HTTP contract (URLs, status, pagination, error shape, OpenAPI / API docs) | `api-design` |
-| Next.js route handlers / Server Actions | `nextjs-patterns` + `typescript-standards` |
-| Auth-protected endpoint | Start: `security-patterns` + `typescript-standards` + `api-design`. Add `backend-patterns` when validation placement or request-path I/O is in scope; add `error-handling-patterns` when failure mapping is in scope. |
+| TypeScript server code (`.ts` APIs, services, validation, async, `tsconfig.json`) | `typescript-standards` |
+| Next.js route handlers / Server Actions (`route.ts`, `proxy.ts`) | `nextjs-patterns` + `typescript-standards` |
+
+| Cross-cutting | Skills |
+| --- | --- |
+| Request path (async I/O, boundary validation, cache keys / TTL, hoist, post-response, queues / workers / DLQ, hot-path N+1 or unbounded lists) | `backend-patterns` |
+| Logs (fields, levels, `warn`, request id) / server env (`process.env` at startup) | `backend-patterns` |
+| Error paths (taxonomy, throw vs return, retries, abort, cleanup, partial-batch, degradation) | `error-handling-patterns` |
+| HTTP contract (URLs, status, 401 / 403 / 404 / 201, pagination, idempotency, versioning, problem details, OpenAPI / Redoc / Scalar) | `api-design` |
+| Auth-protected endpoint | `security-patterns` + `api-design` |
 | Failure mapping (typed errors + transport envelope) | `error-handling-patterns` + `api-design` |
-| Unit / integration tests (services, handlers, APIs) | `testing-patterns` |
+| Authn/authz (authz inside mutating handlers, passkeys, sessions, IDOR, tokens, roles, ownership, injection, SSRF, CSRF, CSP, CORS) | `security-patterns` |
+| Lockfile / dependency audit / OWASP review / install scripts / trustedDependencies / allowBuilds / allowScripts / `minimumReleaseAge` / Docker hardening | `security-patterns` |
+| Deep query hygiene / `deleted_at` filters / transactions / HTTP-in-transaction / ORM (beyond a hot-path spot-check) | `database-patterns` |
+| Unit / integration / handler / API tests, testcontainers, flaky waits | `testing-patterns` |
 | File placement / layout blueprint | `folder-structure-blueprint` |
 
 Skill paths: `skills/<name>/SKILL.md` → `.cursor/skills/<name>/SKILL.md`.
@@ -47,8 +48,7 @@ Skill paths: `skills/<name>/SKILL.md` → `.cursor/skills/<name>/SKILL.md`.
 ### Plan
 - Tell the user: *Connecting **Backend** for this task…*
 - Identify dependencies and risks; break into phases; sketch API/service before coding.
-- No UI/component work. No infra/CI ownership (pipeline YAML, runners, deploy). Lockfile installs, dependency audit, and install-script trust lists stay in scope via `security-patterns`.
-- Out of scope: schema/modeling, migrations, ORM setup, seeds, query-performance tuning.
+- No UI/component work, no schema work (modeling, migrations, ORM setup, seeds, query-performance tuning), no infra/CI ownership (pipeline YAML, runners, deploy) — hand those slices back to Supervisor. Lockfile installs, dependency audit, install-script trust lists, and Dockerfile hardening stay in scope via `security-patterns`.
 
 ### Implement
 - Pick skills from the table; read those `SKILL.md` files only.

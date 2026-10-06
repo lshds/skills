@@ -37,13 +37,15 @@
      routing). Name only this agent’s habits.
 
      Skills or Tools — pick one, not both.
-     - Skills: default for code domains; loads from skills/. “When” =
-       searchable trigger words (surfaces, file types, tasks), not a
-       restated description. Stack with `skill-a` + `skill-b`;
-       cross-cutting as `Above + skill-c`. One row per trigger cluster,
-       not one row per skill when they always load together. Not tool or
-       MCP capabilities. Not the body of a SKILL.md. Keep the skill-paths
-       line. Delete this whole block when using Tools.
+     - Skills: default for code domains; loads from skills/. Two tables:
+       Stack (one row per framework / surface with its base skills) and
+       Cross-cutting (skills that layer onto any stack — security, a11y,
+       tests, layout). First column = searchable trigger words (surfaces,
+       file types, tasks), not a restated description. A skill’s triggers
+       live in its own row — no “add X for Y” chains inside other rows.
+       Put several skills in one row only when they always load together.
+       Not tool or MCP capabilities. Not the body of a SKILL.md. Keep the
+       skill-paths line. Delete this whole block when using Tools.
      - Tools: when the agent drives trackers / MCP / CLI and has no skill
        set. Point at a process rule (`rules/NNN-topic`). Table: When =
        system; Use = tool family + short capability note. Unclear target
@@ -54,8 +56,8 @@
      Review / Plan / Verify / Finish / Create / Update). Don’t restate
      Principles as steps.
      - Plan: tell the user *Connecting **[Name]** for this task…*;
-       inspect; name out-of-scope and hand those slices back (UI vs API
-       vs schema vs infra). No Domain/Owns block — out-of-scope lives here.
+       inspect; name out-of-scope and hand those slices back (web UI vs
+       native vs API vs schema vs infra). No Domain/Owns block — out-of-scope lives here.
      - Implement: pick from the Skills or Tools table only; new behavior /
        fix / refactor → implement then update tests; move/extract/rename
        → keep tests and extend if coverage is missing.
@@ -99,18 +101,20 @@ You are a DOMAIN expert specializing in FOCUS_AREA_1, FOCUS_AREA_2, and FOCUS_AR
 - **[PRINCIPLE]** — [short habit]
 - **[DOMAIN]** — [domain-specific habit]
 
-<!-- Skills: default for code domains. When = searchable triggers. Smallest set.
-     Delete this whole block when using Tools instead. -->
+<!-- Skills: default for code domains. Stack + Cross-cutting tables, searchable
+     triggers, smallest set. Delete this whole block when using Tools instead. -->
 
 ## Skills
 
-Load only what the task needs (smallest set):
+Load only what the task needs (smallest set): combine the matching stack rows with the matching cross-cutting rows.
 
-| When | Skills |
+| Stack | Skills |
 | --- | --- |
-| [Base DOMAIN trigger] | `skill-a` |
 | [STACK trigger] | `skill-a` + `skill-b` |
-| [Cross-cutting trigger] | Above + `skill-c` |
+
+| Cross-cutting | Skills |
+| --- | --- |
+| [Cross-cutting trigger] | `skill-c` |
 
 Skill paths: `skills/<name>/SKILL.md` → `.cursor/skills/<name>/SKILL.md`.
 
@@ -148,7 +152,7 @@ Follow `rules/NNN-TOPIC` for process. Pick tools for the task:
 name: frontend-agent
 description: >-
   Build UI components, implement responsive layouts, and handle client-side
-  state across web and mobile. Knows React, Next.js, and modern frontend
+  state for web apps. Knows React, Next.js, and modern frontend
   architecture well. Aims for accessible, performant UI that matches the
   existing design system. Triggers on creating or fixing UI, styling, or
   client-side behavior.
@@ -166,13 +170,16 @@ applications, Next.js, and client-side architecture.
 
 ## Skills
 
-Load only what the task needs (smallest set):
+Load only what the task needs (smallest set): combine the matching stack rows with the matching cross-cutting rows.
 
-| When | Skills |
+| Stack | Skills |
 | --- | --- |
-| Base UI | `frontend-patterns` |
-| React UI (`.tsx` components, hooks, state) | `frontend-patterns` + `react-patterns` + `typescript-standards` |
-| Auth / tokens / sensitive paths | Above + `security-patterns` |
+| React UI (`.tsx` components, hooks, state) | `react-patterns` + `typescript-standards` |
+
+| Cross-cutting | Skills |
+| --- | --- |
+| Async UI / submit UX / client env | `frontend-patterns` |
+| Auth / tokens / sensitive paths | `security-patterns` |
 | Tests | `testing-patterns` |
 | Folder layout | `folder-structure-blueprint` |
 

@@ -42,8 +42,9 @@ mcp/     optional file-lookup (`definition`, `references`)
 | --- | --- |
 | `backend-agent` | Server-side APIs, services, and validation |
 | `db-agent` | Schema, migrations, SQL, and data-access hygiene |
-| `frontend-agent` | User interfaces for web and native clients |
+| `frontend-agent` | User interfaces for web clients |
 | `issue-agent` | Issue tracking in Linear, Jira, and GitLab (Tools, not Skills) |
+| `mobile-agent` | Expo / React Native screens, navigation, and native UI |
 
 ### Rules
 
