@@ -1,21 +1,24 @@
 # Server vs Client
 
-Prefer Server Components for data, secrets, and first paint over
-`'use client'` on the page, so the browser only loads the leaves that need
-hooks or events. Server code calls data functions directly and guards its
+Prefer async Server Components for data, secrets, and first paint, with
+`'use client'` only on the leaf that needs hooks, events, or browser APIs, so
+the browser downloads only the interactive parts. Server code calls data
+functions directly, keeps request APIs out of client files, and guards server
 modules with `server-only`.
 
-## Default to the server
+## `'use client'` only on the interactive leaf
 
-A file without `'use client'` is a Server Component. It can be async and can
-read cookies, headers, and secrets. It cannot use `useState`, `useEffect`, or
-click handlers.
+`'use client'` on the page ships the whole tree to the browser and moves the
+data load behind an effect and an HTTP call. A Server Component can be async
+and read data directly; only the button needs the browser.
 
 ```tsx
-// ❌ Incorrect: Client Component just to render fetched data
+// ❌ Incorrect: the whole page is a Client Component for one button — products load after hydration through /api
 'use client'
 
 import { useEffect, useState } from 'react'
+
+import { addToCart } from './actions'
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -29,80 +32,37 @@ export default function ProductsPage() {
   return (
     <ul>
       {products.map((product) => (
-        <li key={product.id}>{product.name}</li>
+        <li key={product.id}>
+          {product.name}
+          <button type="button" onClick={() => void addToCart(product.id)}>
+            Add to cart
+          </button>
+        </li>
       ))}
     </ul>
   )
 }
 
-// ✅ Correct: async Server Component fetches on the server
+// ✅ Correct: async server page; only the button is a Client Component
+// app/products/page.tsx
+import { AddToCartButton } from './add-to-cart-button'
+
 export default async function ProductsPage() {
   const products = await fetchProducts()
 
   return (
     <ul>
       {products.map((product) => (
-        <li key={product.id}>{product.name}</li>
+        <li key={product.id}>
+          {product.name}
+          <AddToCartButton productId={product.id} />
+        </li>
       ))}
     </ul>
   )
 }
-```
 
-## `'use client'` only for interactivity
-
-Mark the smallest leaf that needs the browser — not the page.
-
-```tsx
-// ❌ Incorrect: whole page is a Client Component for one button
-'use client'
-
-interface ProductPageProps {
-  product: Product
-}
-
-export default function ProductPage({ product }: ProductPageProps) {
-  const handleAddToCart = () => {
-    void addToCart(product.id)
-  }
-
-  return (
-    <article>
-      <h1>{product.name}</h1>
-      <button type="button" onClick={handleAddToCart}>
-        Add to cart
-      </button>
-    </article>
-  )
-}
-
-// ✅ Correct: server page + client leaf
-import { notFound } from 'next/navigation'
-
-import { AddToCartButton } from './add-to-cart-button'
-
-interface ProductPageProps {
-  params: Promise<{ id: string }>
-}
-
-export default async function ProductPage({ params }: ProductPageProps) {
-  const { id: productId } = await params
-
-  const product = await fetchProductById(productId)
-
-  if (!product) {
-    notFound()
-  }
-
-  return (
-    <article>
-      <h1>{product.name}</h1>
-      <AddToCartButton productId={product.id} />
-    </article>
-  )
-}
-
-// add-to-cart-button.tsx
+// app/products/add-to-cart-button.tsx
 'use client'
 
 import { addToCart } from './actions'
@@ -112,66 +72,72 @@ interface AddToCartButtonProps {
 }
 
 export function AddToCartButton({ productId }: AddToCartButtonProps) {
-  const handleAddToCart = () => {
-    void addToCart(productId)
-  }
-
   return (
-    <button type="button" onClick={handleAddToCart}>
+    <button type="button" onClick={() => void addToCart(productId)}>
       Add to cart
     </button>
   )
 }
 ```
 
-## Server-only APIs stay on the server
+## Request APIs stay out of client files
 
-`cookies`, `headers`, and `next/server` throw in the browser. Import them only
-from Server Components, Server Actions, or route handlers.
+`cookies()` and `headers()` from `next/headers` are server-only; importing them
+in a `'use client'` file fails the build. Read or change them in a Server
+Component, Server Action, or Route Handler.
 
 ```tsx
-// ❌ Incorrect: cookies() inside a Client Component
+// ❌ Incorrect: a Client Component awaits cookies() — next/headers cannot run in the browser bundle
 'use client'
 
 import { cookies } from 'next/headers'
 
-export function SessionGreeting() {
-  const sessionToken = cookies().get('session')?.value
+export function SignOutButton() {
+  const handleSignOut = async () => {
+    const cookieStore = await cookies()
+    cookieStore.delete('session')
+  }
 
-  return <p>{sessionToken}</p>
+  return (
+    <button type="button" onClick={handleSignOut}>
+      Sign out
+    </button>
+  )
 }
 
-// ✅ Correct: read cookies on the server, pass serializable props
+// ✅ Correct: cookies() runs in a Server Action; the form posts to it without 'use client'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 
-export default async function AccountPage() {
-  const cookieStore = await cookies()
+export function SignOutForm() {
+  const signOut = async () => {
+    'use server'
+    const cookieStore = await cookies()
+    cookieStore.delete('session')
+    redirect('/sign-in')
+  }
 
-  const isSignedIn = cookieStore.has('session')
-
-  return <p>{isSignedIn ? 'Signed in' : 'Signed out'}</p>
+  return (
+    <form action={signOut}>
+      <button type="submit">Sign out</button>
+    </form>
+  )
 }
 ```
 
 ## Call the data function, not your own Route Handler
 
 A Server Component already runs on the server. Fetching your own
-`/api/...` adds an HTTP round trip, needs an absolute URL per environment, and
-drops the typed return value.
+`/api/products` adds an HTTP round trip, needs an absolute URL per environment, and drops the
+typed return value.
 
 ```tsx
 // ❌ Incorrect: Server Component calls its own Route Handler over HTTP
 export default async function ProductsPage() {
   const response = await fetch(`${process.env.APP_URL}/api/products`)
-  const products: Product[] = await response.json()
+  const products = parseProducts(await response.json())
 
-  return (
-    <ul>
-      {products.map((product) => (
-        <li key={product.id}>{product.name}</li>
-      ))}
-    </ul>
-  )
+  return <ProductList products={products} />
 }
 
 // ✅ Correct: call the same function the Route Handler uses
@@ -180,13 +146,7 @@ import { fetchProducts } from '@/lib/products'
 export default async function ProductsPage() {
   const products = await fetchProducts()
 
-  return (
-    <ul>
-      {products.map((product) => (
-        <li key={product.id}>{product.name}</li>
-      ))}
-    </ul>
-  )
+  return <ProductList products={products} />
 }
 ```
 
@@ -195,19 +155,13 @@ export default async function ProductsPage() {
 
 ## `import 'server-only'` on server modules
 
-A module that reads the database or a secret can end up in the client bundle
+A module that reads the database or a secret can reach the client bundle
 through one careless import. `import 'server-only'` turns that import into a
 build error instead of shipped code.
 
 ```typescript
-// ❌ Incorrect: nothing stops a Client Component from importing this module
-import { database } from '@/lib/database'
-
-export async function fetchOrdersForUser(userId: string) {
-  return database.order.findMany({ where: { userId } })
-}
-
-// ✅ Correct: a client import now fails the build
+// ✅ Correct: the first import makes any Client Component import of this module fail the build
+// lib/orders.ts
 import 'server-only'
 
 import { database } from '@/lib/database'
@@ -222,11 +176,12 @@ export async function fetchOrdersForUser(userId: string) {
 
 ## Serializable props
 
-Values that cross the server→client boundary must be JSON-serializable — no
-functions, classes, or `Date` instances unless you pass a string.
+Props that cross into a Client Component must be serializable: primitives,
+plain objects, arrays, and Server Actions pass; class instances and ordinary
+functions do not.
 
 ```tsx
-// ❌ Incorrect: pass a class instance and a function into a client child
+// ❌ Incorrect: a class instance and a callback cross the server→client boundary
 'use client'
 
 interface InvoicePanelProps {
@@ -242,7 +197,7 @@ export function InvoicePanel({ invoice, onPaid }: InvoicePanelProps) {
   )
 }
 
-// ✅ Correct: pass plain data; the client calls a Server Action
+// ✅ Correct: plain data crosses; the client calls a Server Action
 'use client'
 
 import { markInvoicePaid } from './actions'
@@ -253,12 +208,8 @@ interface InvoicePanelProps {
 }
 
 export function InvoicePanel({ invoiceId, totalCents }: InvoicePanelProps) {
-  const handleMarkInvoicePaid = () => {
-    void markInvoicePaid(invoiceId)
-  }
-
   return (
-    <button type="button" onClick={handleMarkInvoicePaid}>
+    <button type="button" onClick={() => void markInvoicePaid(invoiceId)}>
       {totalCents}
     </button>
   )

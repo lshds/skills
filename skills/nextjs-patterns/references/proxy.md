@@ -1,174 +1,134 @@
 # Proxy
 
-Prefer `proxy.ts` with a named `proxy` export and a matcher that skips static
-files, so navigations are gated without slowing assets. A default export is
-valid; named `proxy` is the house default.
+Prefer `proxy.ts` with a named `proxy` export and one matcher that skips
+`_next` and static files over an unmatched or blanket gate, so navigations are
+gated without slowing assets or locking users out of sign-in. Proxy makes an
+optimistic cookie check; the page, Server Action, or Route Handler still
+checks the session before it reads private data or writes.
 
-## File and export
+## Named `proxy` with a matcher
 
-Place `proxy.ts` at the project root or next to `src/`. Prefer a named `proxy`
-function. If the repo already has `middleware.ts`, keep that file and export
-until the task asks to rename it.
+Without a matcher, proxy runs for every script, image, and font request. The
+matcher below skips `_next` and static files and always includes `/(api|trpc)`
+so API calls pass through the gate too.
 
 ```typescript
-// ❌ Incorrect: no matcher — proxy runs on every static file
+// ❌ Incorrect: no matcher — proxy runs on every static asset request
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
 
-export function proxy(request: NextRequest) {
+export function proxy() {
   return NextResponse.next()
 }
 
-// ✅ Correct: named proxy + matcher that skips assets
+// ✅ Correct: named proxy plus a matcher that skips _next and static files and includes api/trpc
 import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
 
-const PROXY_MATCHER = [
-  '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-  '/(api|trpc)(.*)',
-] as const
-
-export function proxy(request: NextRequest) {
+export function proxy() {
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: PROXY_MATCHER,
+  matcher: [
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    '/(api|trpc)(.*)',
+  ],
 }
 ```
 
-## Public-first
+- Later sections change only the `proxy` function; keep this `config`.
+- Write the matcher as literals inline in `config` — it is analyzed at build
+  time, and a value pulled from a variable is ignored.
+- A default export is valid; a named `proxy` is the house default.
+- `proxy.ts` runs on the Node.js runtime and replaces the deprecated
+  `middleware.ts` (16). If the repo still has `middleware.ts`, keep its file
+  and export until the user approves the rename.
 
-Marketing and content sites: allow everything, protect a short list.
+## Public-first or protected-first
+
+A blanket "no cookie → `/sign-in`" gate also locks marketing pages and
+redirects `/sign-in` to itself. Pick the shape from the product: public-first
+for marketing and content sites, protected-first for internal tools.
 
 ```typescript
-// ❌ Incorrect: redirect every unsigned request — marketing pages require a session
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// ❌ Incorrect: blanket gate — marketing pages need a session and /sign-in redirects to itself
+import { NextResponse, type NextRequest } from 'next/server'
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.has('session')
-
-  if (!hasSession) {
+  if (!request.cookies.has('session')) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
 
   return NextResponse.next()
 }
 
-// ✅ Correct: protect only the listed prefixes
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+// ✅ Correct: public-first — protect only the listed prefixes
+import { NextResponse, type NextRequest } from 'next/server'
 
-const PROXY_MATCHER = [
-  '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-  '/(api|trpc)(.*)',
-] as const
+const PROTECTED_PREFIXES = ['/dashboard', '/settings']
 
-function isProtectedPath(pathname: string): boolean {
-  return (
-    pathname.startsWith('/dashboard') ||
-    pathname.startsWith('/settings') ||
-    pathname.startsWith('/api/private')
+export function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  const isProtectedPath = PROTECTED_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix),
   )
-}
 
-export function proxy(request: NextRequest) {
-  const pathname = request.nextUrl.pathname
-  const hasSession = request.cookies.has('session')
-
-  if (isProtectedPath(pathname) && !hasSession) {
+  if (isProtectedPath && !request.cookies.has('session')) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
 
   return NextResponse.next()
 }
 
-export const config = {
-  matcher: PROXY_MATCHER,
-}
-```
+// ✅ Correct: protected-first — allow only the listed public paths
+import { NextResponse, type NextRequest } from 'next/server'
 
-## Protected-first
-
-Internal tools: block everything, allow a short public list.
-
-```typescript
-// ❌ Incorrect: block every path — sign-in is unreachable
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+const PUBLIC_PREFIXES = ['/sign-in', '/sign-up', '/api/public']
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.has('session')
-
-  if (!hasSession) {
-    return NextResponse.redirect(new URL('/sign-in', request.url))
-  }
-
-  return NextResponse.next()
-}
-
-// ✅ Correct: allow the public list, protect the rest
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
-
-const PROXY_MATCHER = [
-  '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-  '/(api|trpc)(.*)',
-] as const
-
-function isPublicPath(pathname: string): boolean {
-  return (
+  const { pathname } = request.nextUrl
+  const isPublicPath =
     pathname === '/' ||
-    pathname.startsWith('/sign-in') ||
-    pathname.startsWith('/sign-up') ||
-    pathname.startsWith('/api/public')
-  )
-}
+    PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
-export function proxy(request: NextRequest) {
-  const pathname = request.nextUrl.pathname
-  const hasSession = request.cookies.has('session')
-
-  if (!isPublicPath(pathname) && !hasSession) {
+  if (!isPublicPath && !request.cookies.has('session')) {
     return NextResponse.redirect(new URL('/sign-in', request.url))
   }
 
   return NextResponse.next()
 }
-
-export const config = {
-  matcher: PROXY_MATCHER,
-}
 ```
 
-## Not the only gate
+## Proxy is not the only gate
 
-A matcher that covers pages does not cover every `'use server'` call. Check
-the session again inside the action or route handler before you mutate.
+Proxy only sees that a cookie exists, and a Server Action can be posted from
+any page the prefix list leaves open. Check the session again inside the
+action or Route Handler before you mutate.
 
 ```typescript
-// ❌ Incorrect: action trusts that proxy already ran
+// ❌ Incorrect: the action trusts that proxy already ran — a direct POST deletes without a session
 'use server'
 
 export async function deleteInvoice(invoiceId: string) {
   await database.invoice.delete({ where: { id: invoiceId } })
 }
 
-// ✅ Correct: session check lives in the action
+// ✅ Correct: the action reads the session and scopes the delete to the caller's organization
 'use server'
 
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 export async function deleteInvoice(invoiceId: string) {
-  const cookieStore = await cookies()
-  const sessionToken = cookieStore.get('session')?.value
+  const session = await getSession()
 
-  if (!sessionToken) {
+  if (!session) {
     redirect('/sign-in')
   }
 
-  await database.invoice.delete({ where: { id: invoiceId } })
+  await database.invoice.deleteMany({
+    where: { id: invoiceId, organizationId: session.organizationId },
+  })
 }
 ```
+
+- `getSession()` stands for the repo's session helper and `database` for its
+  data client; use the ones the app has.

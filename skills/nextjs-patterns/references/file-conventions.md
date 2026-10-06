@@ -1,76 +1,64 @@
 # File Conventions
 
-Prefer one special file per role and `await` on `params` / `searchParams` over
-sync params, so only `page` / `route` publish a URL and dynamic data is ready
-before render. Trust required segments, narrow `searchParams`, and call
-`notFound()` / `redirect()` as statements.
+Prefer one special file per role, the generated `PageProps` types, awaited
+`params` / `searchParams`, and `notFound()` / `redirect()` as statements over
+hand-typed sync props and defensive re-checks, so dynamic data is ready before
+render and a missing record is a 404 instead of a 500. On 16.3+, recover one
+section with `catchError` and read root segments with `next/root-params`.
 
-## One role per file
+## One role per special file
 
-Only special filenames become routes or segment UI. Other files in the same
-folder are colocated modules — they are not URLs.
+Only `page.tsx` and `route.ts` publish a URL; every other file in the folder
+is segment UI or a colocated module.
 
-```tsx
-// ❌ Incorrect: move a colocated helper out of app/ — it was never a route
-// lib/format-price.ts (relocated only because it lived under app/)
-export function formatPrice(amountInCents: number) {
-  return `$${(amountInCents / 100).toFixed(2)}`
-}
+- Keep a feature helper beside the page that uses it — it is not a route, so
+  don't move it out of `app/`. When the repo keeps shared helpers in `lib/`,
+  put new shared ones there. Prefix a folder with `_` to keep it out of
+  routing.
+- Add a `layout.tsx` only when the segment shares chrome (nav, shell); a layout
+  that only returns `children` adds work and no UI.
+- The root layout renders `<html lang>` and `<body>` and owns the default
+  `metadata` (title template); load a font with `next/font` only when the app
+  has none yet.
 
-// ✅ Correct: page.tsx owns /products/[id]; the helper sits beside it
-// app/products/[id]/page.tsx
-// app/products/[id]/format-price.ts
-export function formatPrice(amountInCents: number) {
-  return `$${(amountInCents / 100).toFixed(2)}`
-}
-```
+## Await params through the generated props types
 
-- If the repo already keeps shared helpers in `lib/`, put new shared helpers
-  there — don’t invent a second home.
-- Prefix a folder with `_` when it should not be a route segment
-  (`app/products/[id]/_lib/format-price.ts`).
-- `layout.tsx` wraps the segment.
-- `page.tsx` is the route UI.
-- `loading.tsx` is the Suspense fallback for the segment.
-- `error.tsx` is the error UI.
-- `not-found.tsx` is the 404 UI.
-- `route.ts` is the HTTP handler.
-- `template.tsx` remounts on navigation.
-- `default.tsx` fills an empty parallel slot.
-
-## Await `params` and `searchParams`
-
-`params` and `searchParams` are Promises. Await them before you read fields.
+`params` and `searchParams` are Promises, and a query value can be missing or
+repeated (`?tab=a&tab=b` arrives as an array). Hand-written props drift from the
+folder names; `PageProps` follows them.
 
 ```tsx
-// ❌ Incorrect: read params as a plain object
-interface ProductPageProps {
-  params: { id: string }
-}
-
-export default function ProductPage({ params }: ProductPageProps) {
-  const productId = params.id
-
-  return <h1>{productId}</h1>
-}
-
-// ✅ Correct: await the Promise
+// ❌ Incorrect: hand-written sync props — params.id is read off a Promise and tab is assumed to be one string
 import { notFound } from 'next/navigation'
 
 interface ProductPageProps {
-  params: Promise<{ id: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  params: { id: string }
+  searchParams: { tab?: string }
 }
 
 export default async function ProductPage({
   params,
   searchParams,
 }: ProductPageProps) {
-  const [{ id: productId }, { tab: rawTab }] = await Promise.all([
-    params,
-    searchParams,
-  ])
+  const selectedTab = searchParams.tab ?? 'overview'
+  const product = await fetchProductById(params.id)
 
+  if (!product) {
+    notFound()
+  }
+
+  return <ProductTabs product={product} selectedTab={selectedTab} />
+}
+
+// ✅ Correct: PageProps follows the folder; await both and narrow the query value
+import { notFound } from 'next/navigation'
+
+export default async function ProductPage({
+  params,
+  searchParams,
+}: PageProps<'/products/[id]'>) {
+  const { id: productId } = await params
+  const { tab: rawTab } = await searchParams
   const selectedTab = typeof rawTab === 'string' ? rawTab : 'overview'
 
   const product = await fetchProductById(productId)
@@ -79,123 +67,66 @@ export default async function ProductPage({
     notFound()
   }
 
-  return (
-    <article>
-      <h1>{product.name}</h1>
-      <p>{selectedTab}</p>
-    </article>
-  )
+  return <ProductTabs product={product} selectedTab={selectedTab} />
 }
 ```
 
-## Trust required segments; guard `searchParams`
+- `PageProps<'/products/[id]'>`, `LayoutProps<'/dashboard'>` (`children` plus
+  every named `@slot`), and `RouteContext<'/api/products/[id]'>` (the second
+  argument of a route handler) are global types generated by `next dev`,
+  `next build`, or `next typegen` (16) — no import. A repo that hand-writes
+  `{ params: Promise<{ id: string }> }` keeps that style until the user
+  approves the migration.
 
-A required dynamic segment (`[id]`, `[slug]`) only matches a non-empty
-string, so re-checking it adds a dead branch. `searchParams` come from the
-caller: any key can be missing or repeated (`?tab=a&tab=b` gives an array).
+## Trust required segments
 
-```tsx
-// ❌ Incorrect: re-checks a required segment; types a query value as a single string
-import { notFound } from 'next/navigation'
+A required segment is guaranteed by the router; re-checking it adds a dead
+branch, while skipping format checks turns bad input into a 500.
 
-interface OrderPageProps {
-  params: Promise<{ orderId: string }>
-  searchParams: Promise<{ view?: string }>
-}
-
-export default async function OrderPage({
-  params,
-  searchParams,
-}: OrderPageProps) {
-  const [{ orderId }, { view: orderView }] = await Promise.all([
-    params,
-    searchParams,
-  ])
-
-  if (!orderId) {
-    notFound()
-  }
-
-  const order = await fetchOrderById(orderId)
-
-  if (!order) {
-    notFound()
-  }
-
-  return <OrderSummary order={order} view={orderView ?? 'summary'} />
-}
-
-// ✅ Correct: trust the segment; narrow the query value before use
-import { notFound } from 'next/navigation'
-
-interface OrderPageProps {
-  params: Promise<{ orderId: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}
-
-export default async function OrderPage({
-  params,
-  searchParams,
-}: OrderPageProps) {
-  const [{ orderId }, { view: rawView }] = await Promise.all([
-    params,
-    searchParams,
-  ])
-
-  const orderView = typeof rawView === 'string' ? rawView : 'summary'
-
-  const order = await fetchOrderById(orderId)
-
-  if (!order) {
-    notFound()
-  }
-
-  return <OrderSummary order={order} view={orderView} />
-}
-```
-
-- Only an optional catch-all (`[[...slug]]`) can be missing — its param is
-  `string[] | undefined`. A catch-all (`[...slug]`) is a non-empty `string[]`.
-- A required segment is present, not validated. Parse its format (number,
-  UUID) before a lookup that throws on bad input, and call `notFound()` when
-  it does not parse — otherwise `/orders/abc` becomes a 500 instead of a 404.
+- A required segment (`[id]`, `[slug]`) only matches a non-empty string, so
+  `if (!id)` never runs. Only an optional catch-all (`[[...slug]]`) can be
+  missing (`string[] | undefined`); a catch-all (`[...slug]`) is a non-empty
+  `string[]`.
+- Present is not valid: parse the format (number, UUID) before a lookup that
+  throws on bad input, and call `notFound()` when it does not parse — otherwise
+  `/orders/abc` becomes a 500 instead of a 404.
 
 ## `notFound()` and `redirect()` end the render
 
-Both return `never` and throw internally. `return notFound()` reads as if a
-value comes back, and a follow-up `?.` or re-check guards a state TypeScript
-already ruled out.
+Both return `never` and throw a signal Next handles. `return notFound()` reads
+as if a value comes back, a later `?.` guards a state TypeScript already ruled
+out, and a surrounding `catch` swallows the signal, so the page renders its
+fallback instead of a 404.
 
 ```tsx
-// ❌ Incorrect: return in front of notFound(); optional chain after the guard
+// ❌ Incorrect: the catch swallows notFound(); return and ?. guard a state already ruled out
 import { notFound } from 'next/navigation'
 
-interface InvoicePageProps {
-  params: Promise<{ invoiceId: string }>
-}
-
-export default async function InvoicePage({ params }: InvoicePageProps) {
+export default async function InvoicePage({
+  params,
+}: PageProps<'/invoices/[invoiceId]'>) {
   const { invoiceId } = await params
 
-  const invoice = await fetchInvoiceById(invoiceId)
+  try {
+    const invoice = await fetchInvoiceById(invoiceId)
 
-  if (!invoice) {
-    return notFound()
+    if (!invoice) {
+      return notFound()
+    }
+
+    return <h1>{invoice?.number}</h1>
+  } catch {
+    return <p>Could not load the invoice</p>
   }
-
-  return <h1>{invoice?.number}</h1>
 }
 
-// ✅ Correct: call notFound() as a statement; TypeScript narrows invoice after it
+// ✅ Correct: notFound() as a statement outside try/catch; invoice is narrowed after it
 import { notFound } from 'next/navigation'
 
-interface InvoicePageProps {
-  params: Promise<{ invoiceId: string }>
-}
-
-export default async function InvoicePage({ params }: InvoicePageProps) {
+export default async function InvoicePage({
+  params,
+}: PageProps<'/invoices/[invoiceId]'>) {
   const { invoiceId } = await params
-
   const invoice = await fetchInvoiceById(invoiceId)
 
   if (!invoice) {
@@ -206,83 +137,113 @@ export default async function InvoicePage({ params }: InvoicePageProps) {
 }
 ```
 
-- Call `redirect()` / `notFound()` outside `try` / `catch` — a surrounding
-  `catch` swallows the navigation.
+- Let load failures reach `error.tsx` or a `catchError` boundary. When a `try`
+  is unavoidable, call `notFound()` / `redirect()` after it, not inside it.
 
-## Thin layouts
+## Recover a section with `catchError`
 
-Add a `layout.tsx` only when the segment shares chrome (nav, shell). Nested
-layouts that only pass `children` through add work for no UI.
+On 16.3+, `error.tsx` replaces the whole segment, and a hand-rolled class
+boundary around server content also catches `notFound()` / `redirect()` and
+cannot re-fetch the Server Component that failed. `catchError` from
+`next/error` lets those signals through, and `retry()` re-fetches the
+boundary's children, including Server Components.
 
 ```tsx
-// ❌ Incorrect: passthrough layout with no shared chrome
-import type { ReactNode } from 'react'
+// ❌ Incorrect: a class boundary around server content catches notFound() / redirect() and cannot re-fetch it
+'use client'
 
-interface SettingsLayoutProps {
+import { Component, type ReactNode } from 'react'
+
+interface SectionBoundaryProps {
   children: ReactNode
 }
 
-export default function SettingsLayout({ children }: SettingsLayoutProps) {
-  return children
+interface SectionBoundaryState {
+  hasError: boolean
 }
 
-// ✅ Correct: layout owns shared chrome
-import type { ReactNode } from 'react'
+export class SectionBoundary extends Component<
+  SectionBoundaryProps,
+  SectionBoundaryState
+> {
+  state = { hasError: false }
 
-interface SettingsLayoutProps {
-  children: ReactNode
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    return this.state.hasError ? <p>Section unavailable</p> : this.props.children
+  }
 }
 
-export default function SettingsLayout({ children }: SettingsLayoutProps) {
+// ✅ Correct: catchError lets notFound() / redirect() through; retry() re-fetches the server children
+// app/products/[id]/section-error-boundary.tsx
+'use client'
+
+import { catchError, type ErrorInfo } from 'next/error'
+
+interface SectionErrorFallbackProps {
+  title: string
+}
+
+function SectionErrorFallback(
+  { title }: SectionErrorFallbackProps,
+  { error, retry }: ErrorInfo,
+) {
   return (
-    <div>
-      <nav>
-        <a href="/settings/profile">Profile</a>
-        <a href="/settings/billing">Billing</a>
-      </nav>
-      {children}
+    <div role="alert">
+      <h2>{title}</h2>
+      <p>{error.message}</p>
+      <button type="button" onClick={retry}>
+        Try again
+      </button>
     </div>
   )
 }
+
+export default catchError(SectionErrorFallback)
 ```
 
-## Root layout
+- Wrap only the section that may fail, from the Server Component page:
+  `<SectionErrorBoundary title="Reviews are unavailable">` around
+  `<ProductReviews productId={productId} />`.
+- Keep `error.tsx` for segment-wide failures; use `catchError` when one section
+  (reviews, recommendations) should fail and retry while the rest of the page
+  stays.
 
-The root `layout.tsx` sets `html`, `lang`, and default `metadata`. Load a font
-with `next/font` when the app does not already set one.
+## Read root params with `next/root-params`
+
+On 16.3+, a root segment such as `app/[lang]/layout.tsx` is often needed deep
+in the tree. Drilling it as a prop makes every page, layout, and component on
+the way accept and forward a value it never uses.
 
 ```tsx
-// ❌ Incorrect: body only — missing html, lang, and default metadata
-import type { ReactNode } from 'react'
-
-interface RootLayoutProps {
-  children: ReactNode
+// ❌ Incorrect: language is a prop — every component between app/[lang] and here must forward it
+interface PublishedDateProps {
+  publishedAt: Date
+  language: string
 }
 
-export default function RootLayout({ children }: RootLayoutProps) {
-  return <body>{children}</body>
+export function PublishedDate({ publishedAt, language }: PublishedDateProps) {
+  return <span>{publishedAt.toLocaleDateString(language)}</span>
 }
 
-// ✅ Correct: html lang, metadata, and font on the root
-import { Inter } from 'next/font/google'
-import type { ReactNode } from 'react'
+// ✅ Correct: the component that formats the date reads the root param itself
+import { lang } from 'next/root-params'
 
-const interFont = Inter({ subsets: ['latin'] })
-
-export const metadata = {
-  title: { default: 'Catalog', template: '%s | Catalog' },
-  description: 'Product catalog',
+interface PublishedDateProps {
+  publishedAt: Date
 }
 
-interface RootLayoutProps {
-  children: ReactNode
-}
+export async function PublishedDate({ publishedAt }: PublishedDateProps) {
+  const language = await lang()
 
-export default function RootLayout({ children }: RootLayoutProps) {
-  return (
-    <html lang="en">
-      <body className={interFont.className}>{children}</body>
-    </html>
-  )
+  return <span>{publishedAt.toLocaleDateString(language)}</span>
 }
 ```
+
+- Import the param by its segment name (`app/[lang]` → `lang`) and `await` it.
+- Server Components only for now — Route Handlers and Server Actions still read
+  `params` or receive the value as an argument.
+- It works inside `'use cache'` functions.

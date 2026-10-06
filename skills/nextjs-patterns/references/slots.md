@@ -1,17 +1,18 @@
 # Slots
 
-Prefer parallel `@` slots and an intercepting `(.)` modal over awaiting every
-panel in one page, so each slot can load on its own and refresh still hits the
-full route.
+Prefer parallel `@` slots with their own `loading.tsx`, and an intercepting
+`(.)` modal backed by a full page, over one page that awaits every panel, so
+each panel streams on its own and a refresh or shared link still renders the
+full route. Every slot gets a `default.tsx`.
 
-## Parallel slots
+## Parallel slots for independent panels
 
-A folder named `@analytics` becomes an `analytics` prop on the layout. Give
-the slot its own `page.tsx` and `loading.tsx` so a slow panel does not block
-the main column.
+A folder named `@analytics` becomes an `analytics` prop on the layout. With its
+own `page.tsx` and `loading.tsx`, a slow panel no longer blocks the main
+column.
 
 ```tsx
-// ❌ Incorrect: page awaits every panel in one tree
+// ❌ Incorrect: one page awaits every panel — the slowest query holds the whole dashboard
 export default async function DashboardPage() {
   const [analyticsStats, teamMembers] = await Promise.all([
     fetchAnalyticsStats(),
@@ -26,21 +27,13 @@ export default async function DashboardPage() {
   )
 }
 
-// ✅ Correct: @analytics and @team are layout slots
+// ✅ Correct: @analytics and @team are slots; LayoutProps types children and both slots
 // app/dashboard/layout.tsx
-import type { ReactNode } from 'react'
-
-interface DashboardLayoutProps {
-  children: ReactNode
-  analytics: ReactNode
-  team: ReactNode
-}
-
 export default function DashboardLayout({
   children,
   analytics,
   team,
-}: DashboardLayoutProps) {
+}: LayoutProps<'/dashboard'>) {
   return (
     <div>
       <main>{children}</main>
@@ -70,68 +63,46 @@ export default async function TeamSlot() {
 }
 ```
 
-## `default.tsx` for empty slots
+## `default.tsx` for every slot
 
-A parallel slot 404s when the current URL has no matching page for that slot.
-Add `default.tsx` that returns `null` (or a quiet placeholder).
+On a full page load of a URL where a slot has no matching page, Next renders
+that slot's `default.tsx`; without one, the route 404s.
 
-```tsx
-// ❌ Incorrect: no default — /dashboard/settings 404s the @analytics slot
-// app/dashboard/@analytics/page.tsx exists, but settings has no matching page
-export default async function AnalyticsSlot() {
-  const analyticsStats = await fetchAnalyticsStats()
+```text
+# ❌ Incorrect: no default.tsx — a refresh on /dashboard/settings 404s because @analytics has no settings page
+app/dashboard/settings/page.tsx
+app/dashboard/@analytics/page.tsx
 
-  return <AnalyticsChart analyticsStats={analyticsStats} />
-}
-
-// ✅ Correct: default fills the slot when this URL has no @analytics page
-// app/dashboard/@analytics/default.tsx
-export default function AnalyticsDefault() {
-  return null
-}
+# ✅ Correct: default.tsx fills @analytics on URLs it has no page for
+app/dashboard/settings/page.tsx
+app/dashboard/@analytics/page.tsx
+app/dashboard/@analytics/default.tsx
 ```
 
-## Intercepting modal
+- `default.tsx` returns `null` or the panel's quiet empty state.
 
-`(.)photos/[id]` intercepts `/photos/[id]` on client navigation and renders
-inside the `@modal` slot. The real `app/photos/[id]/page.tsx` still handles
-refresh and shared links.
+## Intercepting modal plus the full page
+
+`(.)photos/[id]` inside `@modal` intercepts `/photos/[id]` on client
+navigation and renders it in the modal slot. A refresh or shared link skips the
+interception, so the real `app/photos/[id]/page.tsx` must exist.
+
+```text
+# ❌ Incorrect: modal only — a refresh or shared link on /photos/42 has no full page to render
+app/layout.tsx
+app/@modal/(.)photos/[id]/page.tsx
+
+# ✅ Correct: intercept for client navigation, full page for refresh, default for the empty slot
+app/layout.tsx
+app/@modal/(.)photos/[id]/page.tsx
+app/@modal/default.tsx
+app/photos/[id]/page.tsx
+```
 
 ```tsx
-// ❌ Incorrect: modal only — refresh and shared links have no full page
-// app/@modal/(.)photos/[id]/page.tsx
-import { notFound } from 'next/navigation'
-
-interface PhotoModalProps {
-  params: Promise<{ id: string }>
-}
-
-export default async function PhotoModal({ params }: PhotoModalProps) {
-  const { id: photoId } = await params
-
-  const photo = await fetchPhotoById(photoId)
-
-  if (!photo) {
-    notFound()
-  }
-
-  return (
-    <dialog open>
-      <PhotoDetail photo={photo} />
-    </dialog>
-  )
-}
-
-// ✅ Correct: intercept for client nav; full page for refresh; default for empty slot
+// ✅ Correct: the root layout renders the slot; the modal loads the photo the full page loads
 // app/layout.tsx
-import type { ReactNode } from 'react'
-
-interface RootLayoutProps {
-  children: ReactNode
-  modal: ReactNode
-}
-
-export default function RootLayout({ children, modal }: RootLayoutProps) {
+export default function RootLayout({ children, modal }: LayoutProps<'/'>) {
   return (
     <html lang="en">
       <body>
@@ -145,13 +116,10 @@ export default function RootLayout({ children, modal }: RootLayoutProps) {
 // app/@modal/(.)photos/[id]/page.tsx
 import { notFound } from 'next/navigation'
 
-interface PhotoModalProps {
-  params: Promise<{ id: string }>
-}
-
-export default async function PhotoModal({ params }: PhotoModalProps) {
+export default async function PhotoModal({
+  params,
+}: PageProps<'/photos/[id]'>) {
   const { id: photoId } = await params
-
   const photo = await fetchPhotoById(photoId)
 
   if (!photo) {
@@ -169,28 +137,8 @@ export default async function PhotoModal({ params }: PhotoModalProps) {
 export default function ModalDefault() {
   return null
 }
-
-// app/photos/[id]/page.tsx
-import { notFound } from 'next/navigation'
-
-interface PhotoPageProps {
-  params: Promise<{ id: string }>
-}
-
-export default async function PhotoPage({ params }: PhotoPageProps) {
-  const { id: photoId } = await params
-
-  const photo = await fetchPhotoById(photoId)
-
-  if (!photo) {
-    notFound()
-  }
-
-  return (
-    <article>
-      <PhotoDetail photo={photo} />
-      <RelatedPhotos photoId={photoId} />
-    </article>
-  )
-}
 ```
+
+- `app/photos/[id]/page.tsx` is an ordinary page that loads the same photo with
+  `fetchPhotoById` and renders `<PhotoDetail>` with the rest of the route's
+  chrome.

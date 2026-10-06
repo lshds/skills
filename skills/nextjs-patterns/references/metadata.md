@@ -1,49 +1,51 @@
 # Metadata
 
-Prefer `generateMetadata` and `notFound()` over a hard-coded title, so each
-page’s title and Open Graph match the record the user opened.
+Prefer `generateMetadata` that loads the record through the page's own loader
+over a hard-coded `metadata` title, so the title and Open Graph tags match the
+record the user opened. Call `notFound()` when the record is missing, in
+metadata and page alike.
 
-## `generateMetadata`
+## `generateMetadata` from the page's data load
 
-Static `metadata` on the layout is the default. Override per page from the
-same data the page already loads.
+A static `title: 'Product'` labels every product the same in tabs, search
+results, and link previews. Load the record with the loader the page uses,
+deduplicated per request, and 404 when it is missing.
 
 ```tsx
-// ❌ Incorrect: hard-coded title that ignores the product
+// ❌ Incorrect: one hard-coded title for every product, and a missing slug renders an empty page
 export const metadata = {
   title: 'Product',
 }
 
-interface ProductPageProps {
-  params: Promise<{ slug: string }>
-}
-
-export default async function ProductPage({ params }: ProductPageProps) {
+export default async function ProductPage({
+  params,
+}: PageProps<'/products/[slug]'>) {
   const { slug: productSlug } = await params
-
   const product = await fetchProductBySlug(productSlug)
 
   return <h1>{product?.name}</h1>
 }
 
-// ✅ Correct: generateMetadata + notFound when missing
+// ✅ Correct: generateMetadata and the page share one deduplicated loader that 404s when missing
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { cache } from 'react'
 
-interface ProductPageProps {
-  params: Promise<{ slug: string }>
-}
-
-export async function generateMetadata({
-  params,
-}: ProductPageProps): Promise<Metadata> {
-  const { slug: productSlug } = await params
-
+const loadProduct = cache(async (productSlug: string) => {
   const product = await fetchProductBySlug(productSlug)
 
   if (!product) {
-    return {}
+    notFound()
   }
+
+  return product
+})
+
+export async function generateMetadata({
+  params,
+}: PageProps<'/products/[slug]'>): Promise<Metadata> {
+  const { slug: productSlug } = await params
+  const product = await loadProduct(productSlug)
 
   return {
     title: product.name,
@@ -56,114 +58,27 @@ export async function generateMetadata({
   }
 }
 
-export default async function ProductPage({ params }: ProductPageProps) {
-  const { slug: productSlug } = await params
-
-  const product = await fetchProductBySlug(productSlug)
-
-  if (!product) {
-    notFound()
-  }
-
-  return <h1>{product.name}</h1>
-}
-```
-
-## `generateStaticParams`
-
-List the slugs you want at build time. The page still `await`s `params` and
-calls `notFound()` for an unknown slug.
-
-```tsx
-// ❌ Incorrect: no static params — every slug waits until request time
-interface ProductPageProps {
-  params: Promise<{ slug: string }>
-}
-
-export default async function ProductPage({ params }: ProductPageProps) {
-  const { slug: productSlug } = await params
-
-  const product = await fetchProductBySlug(productSlug)
-
-  return <h1>{product?.name}</h1>
-}
-
-// ✅ Correct: known slugs at build time; page still awaits params and 404s unknowns
-import { notFound } from 'next/navigation'
-
-export async function generateStaticParams() {
-  const products = await database.product.findMany({
-    select: { slug: true },
-  })
-
-  return products.map((product) => ({ slug: product.slug }))
-}
-
-interface ProductPageProps {
-  params: Promise<{ slug: string }>
-}
-
-export default async function ProductPage({ params }: ProductPageProps) {
-  const { slug: productSlug } = await params
-
-  const product = await fetchProductBySlug(productSlug)
-
-  if (!product) {
-    notFound()
-  }
-
-  return <h1>{product.name}</h1>
-}
-```
-
-## Open Graph image file
-
-A sibling `opengraph-image.tsx` (or `.png`) becomes the OG image for that
-segment when you do not pass `openGraph.images` in metadata.
-
-```tsx
-// ❌ Incorrect: one static image for every product
-export const metadata = {
-  openGraph: {
-    images: [{ url: '/og.png', width: 1200, height: 630 }],
-  },
-}
-
-// ✅ Correct: opengraph-image.tsx reads the same slug as the page
-import { ImageResponse } from 'next/og'
-
-export const size = { width: 1200, height: 630 }
-export const contentType = 'image/png'
-
-interface OpenGraphImageProps {
-  params: Promise<{ slug: string }>
-}
-
-export default async function OpenGraphImage({
+export default async function ProductPage({
   params,
-}: OpenGraphImageProps) {
+}: PageProps<'/products/[slug]'>) {
   const { slug: productSlug } = await params
+  const product = await loadProduct(productSlug)
 
-  const product = await fetchProductBySlug(productSlug)
-
-  const imageTitle = product?.name ?? 'Catalog'
-
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          display: 'flex',
-          height: '100%',
-          width: '100%',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 64,
-        }}
-      >
-        {imageTitle}
-      </div>
-    ),
-    size,
-  )
+  return <h1>{product.name}</h1>
 }
 ```
+
+- Static `metadata` with a title template lives on the root layout; pages
+  override it with `generateMetadata` only when the title depends on data.
+
+## Known slugs and per-record images
+
+These follow the same load: the record behind the URL drives the output.
+
+- `generateStaticParams` lists the slugs to prerender at build time; the page
+  still awaits `params` and calls `notFound()` for a slug the list did not
+  include.
+- A per-record Open Graph image comes from `openGraph.images` in
+  `generateMetadata`, or from a sibling `opengraph-image.tsx` that awaits its
+  `params` and loads the record by the same slug. One static image in the
+  layout's `metadata` shows the same preview for every product.

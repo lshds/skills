@@ -1,26 +1,33 @@
 # Streaming
 
-Prefer a fast shell plus `<Suspense>` around slow children over awaiting every
-fetch in the page, so the header paints before the slow call finishes.
+Prefer a fast shell with each slow read in its own async child behind
+`<Suspense>` over a page that awaits every fetch, so the header paints before
+the slow call finishes. Use `loading.tsx` for the segment's first paint and
+inline `<Suspense>` for islands; remount an island with `key` when its filters
+change.
 
-## Colocate the slow fetch
+## `loading.tsx` for the segment, Suspense for slow islands
 
-A parent that `await`s everything blocks the whole page. Move the slow read
-into the child that renders it.
+`loading.tsx` wraps the whole segment, so a page that awaits every call shows
+the segment skeleton until the slowest one finishes. Move each slow read into
+the child that renders it and give that child its own boundary.
 
 ```tsx
-// ❌ Incorrect: page awaits reviews before any markup
-interface ProductPageProps {
-  params: Promise<{ id: string }>
-}
+// ❌ Incorrect: the page awaits reviews with the product — only loading.tsx shows until reviews finish
+import { notFound } from 'next/navigation'
 
-export default async function ProductPage({ params }: ProductPageProps) {
+export default async function ProductPage({
+  params,
+}: PageProps<'/products/[id]'>) {
   const { id: productId } = await params
-
   const [product, productReviews] = await Promise.all([
     fetchProductById(productId),
     fetchReviewsByProductId(productId),
   ])
+
+  if (!product) {
+    notFound()
+  }
 
   return (
     <article>
@@ -30,21 +37,24 @@ export default async function ProductPage({ params }: ProductPageProps) {
   )
 }
 
-// ✅ Correct: product is the shell; reviews stream in
-import { Suspense } from 'react'
-import { notFound } from 'next/navigation'
-
-interface ProductPageProps {
-  params: Promise<{ id: string }>
+// ✅ Correct: loading.tsx covers the segment's first paint; reviews stream in their own island
+// app/products/[id]/loading.tsx
+export default function ProductLoading() {
+  return <ProductSkeleton />
 }
+
+// app/products/[id]/page.tsx
+import { notFound } from 'next/navigation'
+import { Suspense } from 'react'
 
 interface ProductReviewsProps {
   productId: string
 }
 
-export default async function ProductPage({ params }: ProductPageProps) {
+export default async function ProductPage({
+  params,
+}: PageProps<'/products/[id]'>) {
   const { id: productId } = await params
-
   const product = await fetchProductById(productId)
 
   if (!product) {
@@ -68,177 +78,56 @@ async function ProductReviews({ productId }: ProductReviewsProps) {
 }
 ```
 
-## `loading.tsx` vs inline Suspense
+- Give each independent island its own `<Suspense>` so one slow panel does not
+  hold the others.
 
-`loading.tsx` wraps the whole segment. Use it for the route’s first paint.
-Use inline `<Suspense>` for islands that should stream after the shell.
+## Remount the island with `key` when filters change
+
+A new search string on the same page keeps the already revealed boundary, so
+the previous results stay on screen while the new ones load. A `key` built from
+the filters remounts the boundary and shows the fallback again.
 
 ```tsx
-// ❌ Incorrect: page awaits every island — loading.tsx never gets a shell
-interface OrderPageProps {
-  params: Promise<{ id: string }>
-}
+// ❌ Incorrect: no key — the previous category's products stay on screen while the new filter loads
+import { Suspense } from 'react'
 
-export default async function OrderPage({ params }: OrderPageProps) {
-  const { id: orderId } = await params
-
-  const [order, orderEvents, orderNotes] = await Promise.all([
-    fetchOrderById(orderId),
-    fetchOrderEventsByOrderId(orderId),
-    fetchOrderNotesByOrderId(orderId),
-  ])
+export default async function ProductsPage({
+  searchParams,
+}: PageProps<'/products'>) {
+  const { category: rawCategory } = await searchParams
+  const selectedCategory =
+    typeof rawCategory === 'string' ? rawCategory : 'all'
 
   return (
-    <article>
-      <h1>Order {order.number}</h1>
-      <EventList orderEvents={orderEvents} />
-      <NoteList orderNotes={orderNotes} />
-    </article>
+    <Suspense fallback={<ProductListSkeleton />}>
+      <ProductList selectedCategory={selectedCategory} />
+    </Suspense>
   )
 }
 
-// ✅ Correct: loading.tsx for the [id] segment; Suspense for each island
-// app/orders/[id]/loading.tsx
-export default function OrderLoading() {
-  return <OrderDetailSkeleton />
-}
-
-// app/orders/[id]/page.tsx
+// ✅ Correct: key on the boundary remounts the island, so the fallback shows for each new filter
 import { Suspense } from 'react'
-import { notFound } from 'next/navigation'
-
-interface OrderPageProps {
-  params: Promise<{ id: string }>
-}
-
-interface OrderTimelineProps {
-  orderId: string
-}
-
-interface OrderNotesProps {
-  orderId: string
-}
-
-export default async function OrderPage({ params }: OrderPageProps) {
-  const { id: orderId } = await params
-
-  const order = await fetchOrderById(orderId)
-
-  if (!order) {
-    notFound()
-  }
-
-  return (
-    <article>
-      <h1>Order {order.number}</h1>
-      <Suspense fallback={<TimelineSkeleton />}>
-        <OrderTimeline orderId={orderId} />
-      </Suspense>
-      <Suspense fallback={<NotesSkeleton />}>
-        <OrderNotes orderId={orderId} />
-      </Suspense>
-    </article>
-  )
-}
-
-async function OrderTimeline({ orderId }: OrderTimelineProps) {
-  const orderEvents = await fetchOrderEventsByOrderId(orderId)
-
-  return <EventList orderEvents={orderEvents} />
-}
-
-async function OrderNotes({ orderId }: OrderNotesProps) {
-  const orderNotes = await fetchOrderNotesByOrderId(orderId)
-
-  return <NoteList orderNotes={orderNotes} />
-}
-```
-
-## Remount when filters change
-
-A new search string should remount the suspended list so the fallback shows
-again instead of keeping the previous result.
-
-```tsx
-// ❌ Incorrect: no key — the old list stays while new filters load
-import { Suspense } from 'react'
-
-interface ProductsPageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}
 
 interface ProductListProps {
-  selectedCategory: string | undefined
-  currentPage: number
+  selectedCategory: string
 }
 
 export default async function ProductsPage({
   searchParams,
-}: ProductsPageProps) {
-  const { category: rawCategory, page: rawPageValue } = await searchParams
-
+}: PageProps<'/products'>) {
+  const { category: rawCategory } = await searchParams
   const selectedCategory =
-    typeof rawCategory === 'string' ? rawCategory : undefined
-  const currentPage = readPageNumber(rawPageValue)
+    typeof rawCategory === 'string' ? rawCategory : 'all'
 
   return (
-    <div>
-      <FilterSidebar />
-      <Suspense fallback={<ProductListSkeleton />}>
-        <ProductList
-          selectedCategory={selectedCategory}
-          currentPage={currentPage}
-        />
-      </Suspense>
-    </div>
+    <Suspense key={selectedCategory} fallback={<ProductListSkeleton />}>
+      <ProductList selectedCategory={selectedCategory} />
+    </Suspense>
   )
 }
 
-// ✅ Correct: key remounts the island when filters change
-import { Suspense } from 'react'
-
-interface ProductsPageProps {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}
-
-interface ProductListProps {
-  selectedCategory: string | undefined
-  currentPage: number
-}
-
-export default async function ProductsPage({
-  searchParams,
-}: ProductsPageProps) {
-  const { category: rawCategory, page: rawPageValue } = await searchParams
-
-  const selectedCategory =
-    typeof rawCategory === 'string' ? rawCategory : undefined
-  const currentPage = readPageNumber(rawPageValue)
-
-  return (
-    <div>
-      <FilterSidebar />
-      <Suspense
-        key={`${selectedCategory ?? 'all'}-${String(currentPage)}`}
-        fallback={<ProductListSkeleton />}
-      >
-        <ProductList
-          selectedCategory={selectedCategory}
-          currentPage={currentPage}
-        />
-      </Suspense>
-    </div>
-  )
-}
-
-async function ProductList({
-  selectedCategory,
-  currentPage,
-}: ProductListProps) {
-  const products = await fetchProducts({
-    selectedCategory,
-    currentPage,
-  })
+async function ProductList({ selectedCategory }: ProductListProps) {
+  const products = await fetchProductsByCategory(selectedCategory)
 
   return (
     <ul>
@@ -248,18 +137,8 @@ async function ProductList({
     </ul>
   )
 }
-
-function readPageNumber(rawPageValue: string | string[] | undefined) {
-  if (typeof rawPageValue !== 'string') {
-    return 1
-  }
-
-  const parsedPage = Number.parseInt(rawPageValue, 10)
-
-  if (Number.isNaN(parsedPage) || parsedPage < 1) {
-    return 1
-  }
-
-  return parsedPage
-}
 ```
+
+- Build the key from every filter the island reads (category and page, for
+  example); a filter left out of the key keeps stale results when only it
+  changes.
