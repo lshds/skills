@@ -13,8 +13,8 @@ Use a camelCase attribute selector, signal inputs, and `host` — not
 // ❌ Incorrect: HostBinding decorators + kebab attribute selector
 @Directive({ selector: '[app-highlight]' })
 export class Highlight {
-  @Input('app-highlight') color = 'yellow'
-  @HostBinding('style.backgroundColor') bg = this.color
+  @Input('app-highlight') highlightColor = 'yellow'
+  @HostBinding('style.backgroundColor') backgroundColor = this.highlightColor
 }
 
 // ✅ Correct: camelCase selector + readonly signal input + host
@@ -38,10 +38,11 @@ Wire document/window listeners through `host` and emit domain outputs.
 @Directive({ selector: '[appClickOutside]' })
 export class ClickOutside implements OnInit, OnDestroy {
   ngOnInit() {
-    document.addEventListener('click', this.onDocumentClick)
+    document.addEventListener('click', this.emitIfOutside)
   }
+
   ngOnDestroy() {
-    document.removeEventListener('click', this.onDocumentClick)
+    document.removeEventListener('click', this.emitIfOutside)
   }
 }
 
@@ -81,19 +82,22 @@ Compose reusable behaviors onto components instead of duplicating host bindings.
 @Component({
   selector: 'app-chip',
   host: {
-    '[class.disabled]': 'disabled()',
+    '[class.disabled]': 'isDisabled()',
     '[class.hovered]': 'isHovered()',
   },
   template: `<ng-content />`,
 })
 export class AppChip {
-  readonly disabled = input(false, { transform: booleanAttribute })
+  readonly isDisabled = input(false, {
+    alias: 'disabled',
+    transform: booleanAttribute,
+  })
   readonly isHovered = signal(false)
 }
 
 // ✅ Correct: hostDirectives with exposed inputs/outputs
 @Directive({
-  selector: '[disableable]',
+  selector: '[appDisableable]',
   host: {
     '[class.disabled]': 'isDisabled()',
   },

@@ -1,7 +1,10 @@
 # SSR
 
 Prefer transfer cache over refetching the same GETs. Gate browser APIs with
-`afterNextRender` / `isPlatformBrowser` so server and client markup match.
+`afterNextRender` / `isPlatformBrowser` so server and client markup match. On
+Angular 22, a bare `provideClientHydration()` is the whole hydration setup;
+`@defer (hydrate on viewport | interaction | idle)` decides when each block
+hydrates.
 
 ## Browser-only code
 
@@ -11,7 +14,15 @@ render.
 ```typescript
 // ❌ Incorrect: DOM in the constructor / field initializer
 export class AnalyticsChart {
-  private readonly chart = new ChartLib(document.getElementById('chart')!)
+  constructor() {
+    const chartElement = document.getElementById('chart')
+
+    if (!chartElement) {
+      return
+    }
+
+    new ChartLib(chartElement)
+  }
 }
 
 // ✅ Correct: afterNextRender (browser-only)
@@ -32,7 +43,7 @@ export class AnalyticsChart {
 
 ## Browser globals
 
-Tokens that are `null` on the server — don’t assume `localStorage` exists.
+Tokens that are `undefined` on the server — don’t assume `localStorage` exists.
 
 ```typescript
 // ❌ Incorrect: assume localStorage always exists
@@ -41,15 +52,15 @@ export const LOCAL_STORAGE = new InjectionToken<Storage>('LocalStorage', {
   factory: () => localStorage,
 })
 
-// ✅ Correct: null on the server
-export const LOCAL_STORAGE = new InjectionToken<Storage | null>('LocalStorage', {
+// ✅ Correct: undefined on the server
+export const LOCAL_STORAGE = new InjectionToken<Storage | undefined>('LocalStorage', {
   providedIn: 'root',
   factory: () =>
-    isPlatformBrowser(inject(PLATFORM_ID)) ? localStorage : null,
+    isPlatformBrowser(inject(PLATFORM_ID)) ? localStorage : undefined,
 })
 ```
 
-- Usage: `this.storage?.getItem(storageKey) ?? null`
+- Usage: `this.storage?.getItem(storageKey) ?? undefined`
 
 ## Hydration mismatches
 
@@ -57,9 +68,9 @@ Avoid first-paint values that differ server vs client (clocks, random, “now”
 
 ```typescript
 // ❌ Incorrect: Date.now() / locale time in the field initializer
-@Component({ template: `<p>{{ now }}</p>` })
+@Component({ template: `<p>{{ currentTime }}</p>` })
 export class LiveClock {
-  now = new Date().toLocaleTimeString()
+  currentTime = new Date().toLocaleTimeString()
 }
 
 // ✅ Correct: fill after render
@@ -79,18 +90,72 @@ export class LiveClock {
 
 ## Client hydration
 
-Enable hydration for SSR apps; add event replay when early clicks matter.
+Enable hydration for SSR apps — without it the client re-renders and throws
+away the server DOM. On Angular 22, `provideClientHydration()` already turns
+on incremental hydration, event replay, and the HTTP transfer cache.
 
 ```typescript
-// ❌ Incorrect: SSR without client hydration
-bootstrapApplication(App, { providers: [provideRouter(routes)] })
+import type { ApplicationConfig } from '@angular/core'
+import {
+  provideClientHydration,
+  withEventReplay,
+  withIncrementalHydration,
+} from '@angular/platform-browser'
+import { provideRouter } from '@angular/router'
+import { routes } from './app.routes'
 
-// ✅ Correct: hydrate + replay early clicks
-provideClientHydration(withEventReplay())
+// ❌ Incorrect: SSR without client hydration — the server DOM is discarded
+export const appConfig: ApplicationConfig = {
+  providers: [provideRouter(routes)],
+}
+
+// ❌ Incorrect: v22 — withIncrementalHydration() is deprecated, withEventReplay() is redundant
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideRouter(routes),
+    provideClientHydration(withIncrementalHydration(), withEventReplay()),
+  ],
+}
+
+// ✅ Correct: v22 default — incremental hydration and event replay included
+export const appConfig: ApplicationConfig = {
+  providers: [provideRouter(routes), provideClientHydration()],
+}
 ```
 
-- `@defer (hydrate on idle)` for incremental hydration.
+- Angular 20–21: keep `withIncrementalHydration()` (and `withEventReplay()`
+  where the repo has it) until the upgrade to 22, then drop them.
+- Opt out of incremental hydration with
+  `provideClientHydration(withNoIncrementalHydration())`.
 - `ngSkipHydration` only for intentional dynamic islands.
+
+## Incremental hydration
+
+Wrap below-fold or rarely used server-rendered UI in `@defer` with a `hydrate`
+trigger. The server HTML stays visible; the block’s code loads and hydrates
+only when the trigger fires, so it stays out of the initial bundle.
+
+```html
+<!-- ❌ Incorrect: every widget hydrates up front with the rest of the page -->
+<app-size-picker [sizes]="sizes()" />
+<app-product-reviews [productId]="productId()" />
+<app-related-products [productId]="productId()" />
+
+<!-- ✅ Correct: hydrate each block when it is needed -->
+@defer (hydrate on interaction) {
+  <app-size-picker [sizes]="sizes()" />
+}
+@defer (hydrate on viewport) {
+  <app-product-reviews [productId]="productId()" />
+}
+@defer (hydrate on idle) {
+  <app-related-products [productId]="productId()" />
+}
+```
+
+- `hydrate on interaction` for controls that matter only once touched;
+  `hydrate on viewport` for below-fold content; `hydrate on idle` for
+  low-priority UI that should still become interactive soon.
 
 ## Render modes
 
@@ -115,13 +180,21 @@ export const serverRoutes: ServerRoute[] = [
 
 ## HTTP transfer cache
 
-Reuse SSR GET responses on the client.
+`provideClientHydration()` reuses SSR GET responses on the client by default.
+Keep it on and narrow it with a filter — turning it off sends every SSR GET
+again from the browser and flashes the page.
 
 ```typescript
-// ❌ Incorrect: no transfer cache — duplicate network + flash
-provideClientHydration()
+import {
+  provideClientHydration,
+  withHttpTransferCacheOptions,
+  withNoHttpTransferCache,
+} from '@angular/platform-browser'
 
-// ✅ Correct: transfer cache with a filter
+// ❌ Incorrect: transfer cache disabled — duplicate network + flash
+provideClientHydration(withNoHttpTransferCache())
+
+// ✅ Correct: default transfer cache minus endpoints that must stay live
 provideClientHydration(
   withHttpTransferCacheOptions({
     includeRequestsWithAuthHeaders: false,

@@ -7,8 +7,8 @@ OnPush is already the default — don’t set it on every decorator.
 
 Omit `changeDetection` (OnPush is the compiler default). The old check-always
 strategy is `ChangeDetectionStrategy.Eager` — `ng update` stamps that on
-existing components; leave it. Don’t rewrite `Eager` components to OnPush
-unless the user asks.
+existing components; leave it, and don’t add it to new components. Don’t
+rewrite `Eager` components to OnPush unless the user asks.
 
 Greenfield is zoneless. Don’t add `provideZonelessChangeDetection()` or
 `provideZoneChangeDetection()`. If the repo still uses Zone.js, keep it and
@@ -19,9 +19,11 @@ ask before migrating.
 @Component({
   selector: 'app-user-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<h2>{{ name() }}</h2>`,
+  template: `<h2>{{ userName() }}</h2>`,
 })
-export class UserCard {}
+export class UserCard {
+  readonly userName = input.required<string>()
+}
 
 bootstrapApplication(App, {
   providers: [provideZoneChangeDetection()],
@@ -51,11 +53,11 @@ I/O over decorator I/O.
 // ❌ Incorrect: decorator I/O + HostBinding
 @Component({
   selector: 'app-user-card',
-  template: `<h2>{{ name }}</h2>`,
+  template: `<h2>{{ userName }}</h2>`,
 })
 export class UserCard {
-  @Input({ required: true }) name!: string
-  @Output() selected = new EventEmitter<string>()
+  @Input({ required: true }) userName!: string
+  @Output() userSelected = new EventEmitter<string>()
   @HostBinding('class.active') isActive = false
 }
 
@@ -63,13 +65,12 @@ export class UserCard {
 @Component({
   selector: 'app-user-card',
   host: { '[class.active]': 'isActive()' },
-  template: `<h2>{{ displayName() }}</h2>`,
+  template: `<h2>{{ userName() }}</h2>`,
 })
 export class UserCard {
   readonly userName = input.required<string>()
   readonly isActive = input(false, { transform: booleanAttribute })
   readonly userSelected = output<string>()
-  protected readonly displayName = computed(() => this.userName())
 
   selectUser() {
     this.userSelected.emit(this.userName())
@@ -91,10 +92,12 @@ export class UserProfile {
   saveUserData() {
     this.userSaved.emit()
   }
+
   userId = input.required<string>()
   fullName = computed(() => `${this.firstName()} ${this.lastName()}`)
   firstName = input.required<string>()
   lastName = input.required<string>()
+  userSaved = output<void>()
 }
 
 // ✅ Correct: APIs first; protected template helpers
@@ -120,11 +123,12 @@ Put classes, styles, and attrs in `host` — not `@HostBinding` / `@HostListener
 
 ```typescript
 // ❌ Incorrect: @HostBinding / @HostListener
-@HostBinding('class.expanded') get expandedClass() {
+@HostBinding('class.expanded') get hasExpandedClass() {
   return this.isExpanded()
 }
-@HostListener('click') onClick() {
-  this.toggleExpanded()
+
+@HostListener('click') toggleExpanded() {
+  this.isExpanded.update((isCurrentlyExpanded) => !isCurrentlyExpanded)
 }
 
 // ✅ Correct: host object on the decorator
@@ -151,8 +155,8 @@ Prefer signal queries over decorator queries.
 
 ```typescript
 // ❌ Incorrect: decorator queries
-@ViewChild('container') container!: ElementRef
-@ContentChildren(Tab) tabs!: QueryList<Tab>
+@ViewChild('container') galleryContainer!: ElementRef
+@ContentChildren(Tab) tabPanels!: QueryList<Tab>
 
 // ✅ Correct: readonly signal queries
 readonly galleryContainer =
@@ -171,10 +175,14 @@ interface and keep it thin.
 ```typescript
 // ❌ Incorrect: fetch and setup dumped in ngOnInit
 export class UserProfile implements OnInit {
-  users: User[] = []
+  private readonly httpClient = inject(HttpClient)
+  private readonly logger = inject(Logger)
+  readonly userId = input.required<string>()
+  protected user: User | undefined
+
   ngOnInit() {
-    this.httpClient.get<User[]>('/api/users').subscribe((users) => {
-      this.users = users
+    this.httpClient.get<User>(`/api/users/${this.userId()}`).subscribe((user) => {
+      this.user = user
     })
     this.logger.setMode('info')
   }
@@ -223,6 +231,6 @@ export function isValidEmail(email: string): boolean {
 
 export class CheckoutPage {
   readonly email = input.required<string>()
-  protected readonly emailIsValid = computed(() => isValidEmail(this.email()))
+  protected readonly isEmailValid = computed(() => isValidEmail(this.email()))
 }
 ```

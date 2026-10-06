@@ -112,14 +112,16 @@ Prefer `CanActivateFn` / `CanDeactivateFn` over class guards.
 // ❌ Incorrect: class CanActivate / CanDeactivate for new guards
 @Injectable({ providedIn: 'root' })
 export class AuthGuard implements CanActivate {
+  private readonly authService = inject(AuthService)
+
   canActivate() {
-    return inject(AuthService).isAuthenticated()
+    return this.authService.isAuthenticated()
   }
 }
 
 // ✅ Correct: functional guards
 export const authGuard: CanActivateFn = (
-  activatedRoute,
+  _routeSnapshot,
   routerState,
 ) => {
   const authService = inject(AuthService)
@@ -160,9 +162,11 @@ params that change while the page stays open, read `input()` from
 // ❌ Incorrect: subscribe in ngOnInit (neither resolver nor httpResource)
 ngOnInit() {
   const userId = this.activatedRoute.snapshot.paramMap.get('id')
+
   if (!userId) {
     return
   }
+
   this.userApi.fetchUserById(userId).subscribe((user) => {
     this.user = user
   })
@@ -172,7 +176,7 @@ ngOnInit() {
 export function readResolvedUserName(
   routeSnapshot: ActivatedRouteSnapshot,
 ): string {
-  const resolvedUser = routeSnapshot.data['user']
+  const resolvedUser: unknown = routeSnapshot.data['user']
 
   if (
     typeof resolvedUser !== 'object' ||
@@ -191,8 +195,8 @@ export function readResolvedUserName(
   return userName
 }
 
-export const userResolver: ResolveFn<User> = (activatedRoute) => {
-  const userId = activatedRoute.paramMap.get('id')
+export const userResolver: ResolveFn<User> = (routeSnapshot) => {
+  const userId = routeSnapshot.paramMap.get('id')
 
   if (!userId) {
     return inject(Router).createUrlTree(['/users'])
@@ -227,10 +231,7 @@ export class UserDetailPage {
 // ✅ Correct: httpResource on the page when the view owns loading/error
 export class UserDetailPage {
   readonly id = input.required<string>()
-  readonly userResource = httpResource<User>(() => {
-    const userId = this.id()
-    return `/api/users/${userId}`
-  })
+  readonly userResource = httpResource<User>(() => `/api/users/${this.id()}`)
 }
 ```
 

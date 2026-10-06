@@ -9,15 +9,17 @@ Use `signal` + `computed` — not `BehaviorSubject` for simple UI state.
 
 ```typescript
 // ❌ Incorrect: BehaviorSubject for simple local UI state
-private count$ = new BehaviorSubject(0)
-count = this.count$.asObservable()
-increment() {
-  this.count$.next(this.count$.value + 1)
+private itemCount$ = new BehaviorSubject(0)
+itemCount = this.itemCount$.asObservable()
+
+incrementCount() {
+  this.itemCount$.next(this.itemCount$.value + 1)
 }
 
 // ✅ Correct: signal + computed
 itemCount = signal(0)
 doubledCount = computed(() => this.itemCount() * 2)
+
 incrementCount() {
   this.itemCount.update((currentCount) => currentCount + 1)
 }
@@ -32,6 +34,7 @@ that writes back.
 // ❌ Incorrect: effect resets selection when the list changes
 menuOptions = signal(['A', 'B', 'C'])
 selectedOption = signal('A')
+
 constructor() {
   effect(() => this.selectedOption.set(this.menuOptions()[0]))
 }
@@ -61,6 +64,7 @@ constructor() {
   effect((onCleanup) => {
     const searchQuery = this.searchQuery()
     const timerId = setTimeout(() => this.logSearchQuery(searchQuery), 300)
+
     onCleanup(() => clearTimeout(timerId))
   })
 }
@@ -74,18 +78,18 @@ Expose readonly signals; mutate only through service methods.
 // ❌ Incorrect: public writable signal
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  user = signal<User | null>(null)
+  user = signal<User | undefined>(undefined)
 }
 
 // ✅ Correct: private writable + asReadonly / computed
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly userState = signal<User | null>(null)
+  private readonly userState = signal<User | undefined>(undefined)
   readonly user = this.userState.asReadonly()
-  readonly isAuthenticated = computed(() => this.userState() !== null)
+  readonly isAuthenticated = computed(() => Boolean(this.userState()))
 
   clearUser() {
-    this.userState.set(null)
+    this.userState.set(undefined)
   }
 }
 ```
@@ -100,6 +104,7 @@ and an effect to derive.
 readonly products = signal<Product[]>([])
 readonly filterQuery = signal('')
 readonly filteredProducts = signal<Product[]>([])
+
 constructor() {
   effect(() => {
     const normalizedFilter = this.filterQuery().toLowerCase()
@@ -132,6 +137,7 @@ readonly filteredProducts = computed(() => {
     product.name.toLowerCase().includes(normalizedFilter),
   )
 })
+
 setFilterQuery(filterQuery: string) {
   this.productListState.update((currentState) => ({
     ...currentState,
@@ -151,6 +157,7 @@ or `switchMap` + `debounceTime` — don’t leave overlapping GETs.
 this.userService.users$.subscribe((users) => {
   this.users = users
 })
+
 searchUsers(searchQuery: string) {
   this.httpClient
     .get(`/api/search?q=${searchQuery}`)
@@ -163,6 +170,7 @@ users = toSignal(this.userService.users$, { initialValue: [] })
 searchQuery = signal('')
 searchResource = httpResource<SearchResult[]>(() => {
   const searchQuery = this.searchQuery()
+
   return searchQuery.length >= 2
     ? `/api/search?q=${searchQuery}`
     : undefined

@@ -1,8 +1,8 @@
 # HTTP
 
-Prefer `httpResource` / `resource` for reactive reads. Bind status from the
-resource — don’t keep parallel flags. Use `HttpClient` for mutations and
-operator-heavy pipelines. Functional interceptors only.
+Prefer `httpResource` / `resource` / `rxResource` for reactive reads. Bind
+status from the resource — don’t keep parallel flags. Use `HttpClient` for
+mutations and operator-heavy pipelines. Functional interceptors only.
 
 ## httpResource and resource
 
@@ -12,17 +12,20 @@ belong in `httpResource` on the page (typed, no manual `json()` casts; return
 `ResolveFn` only when navigation must not start without the data.
 
 ```typescript
+import { httpResource } from '@angular/common/http'
+import { input, signal } from '@angular/core'
+
 // ❌ Incorrect: manual subscribe + flags for every GET
 users: User[] = []
-loading = false
-error: string | null = null
+isLoading = false
+errorMessage: string | undefined
 
 ngOnInit() {
-  this.loading = true
-  this.http.get<User[]>('/api/users').subscribe({
+  this.isLoading = true
+  this.httpClient.get<User[]>('/api/users').subscribe({
     next: (users) => (this.users = users),
-    error: () => (this.error = 'failed'),
-    complete: () => (this.loading = false),
+    error: () => (this.errorMessage = 'failed'),
+    complete: () => (this.isLoading = false),
   })
 }
 
@@ -31,6 +34,7 @@ readonly id = input.required<string>()
 
 userResource = httpResource<User>(() => {
   const userId = this.id()
+
   return userId ? `/api/users/${userId}` : undefined
 })
 
@@ -38,13 +42,57 @@ searchQuery = signal('')
 
 searchResource = httpResource<SearchResult[]>(() => {
   const searchQuery = this.searchQuery()
+
   return searchQuery.length >= 2
     ? `/api/search?q=${searchQuery}`
     : undefined
 })
 ```
 
-- Use `resource` for non-HTTP async work.
+- Use `resource()` (`params` + a Promise-returning `loader`) for non-HTTP async
+  work.
+
+## Observable loaders with rxResource
+
+When the source is already an Observable — a service method on `HttpClient`, a
+socket stream — use `rxResource()` from `@angular/core/rxjs-interop`.
+Converting it to a Promise for `resource()` ignores the abort signal and keeps
+only the first emission.
+
+```typescript
+import { inject, input, resource } from '@angular/core'
+import { rxResource } from '@angular/core/rxjs-interop'
+import { firstValueFrom } from 'rxjs'
+
+// ❌ Incorrect: Observable squeezed into resource() — no cancel, first value only
+export class UserDetailPage {
+  private readonly userApi = inject(UserApi)
+  readonly id = input.required<string>()
+
+  readonly userResource = resource({
+    params: () => ({ userId: this.id() }),
+    loader: ({ params }) =>
+      firstValueFrom(this.userApi.fetchUserById(params.userId)),
+  })
+}
+
+// ✅ Correct: rxResource subscribes, and unsubscribes when params change
+export class UserDetailPage {
+  private readonly userApi = inject(UserApi)
+  readonly id = input.required<string>()
+
+  readonly userResource = rxResource({
+    params: () => ({ userId: this.id() }),
+    stream: ({ params }) => this.userApi.fetchUserById(params.userId),
+  })
+}
+```
+
+- Same option shape as `resource()`, with `stream` (returns an Observable) in
+  place of `loader`. Return `undefined` from `params` to keep it idle until
+  inputs are ready.
+- Bind `isLoading()`, `error()`, `hasValue()`, and `value()` exactly as with
+  `httpResource`.
 
 ## Resource status
 
@@ -53,10 +101,10 @@ keep parallel flags beside a subscribe.
 
 ```html
 <!-- ❌ Incorrect: hand-rolled flags beside a raw subscribe -->
-@if (loading) {
+@if (isLoading) {
   <p>Loading…</p>
-} @else if (error) {
-  <p>{{ error }}</p>
+} @else if (errorMessage) {
+  <p>{{ errorMessage }}</p>
 } @else {
   <h1>{{ user?.name }}</h1>
 }
@@ -79,6 +127,7 @@ Keep URLs and CRUD in injectable services. Use `HttpClient` for POST/PATCH/DELET
 // ❌ Incorrect: HttpClient calls scattered in every component
 export class UserProfilePage {
   private readonly httpClient = inject(HttpClient)
+
   replaceUser(user: User) {
     return this.httpClient.put(`/api/users/${user.id}`, user)
   }
@@ -114,7 +163,10 @@ export class ApiPrefixInterceptor implements HttpInterceptor {
 }
 
 // ✅ Correct: functional interceptors + provideHttpClient
-export const apiPrefixInterceptor: HttpInterceptorFn = (request, next) => {
+export function apiPrefixInterceptor(
+  request: HttpRequest<unknown>,
+  next: HttpHandlerFn,
+) {
   const apiUrl = inject(API_URL)
   const isAbsoluteUrl = request.url.startsWith('http')
 

@@ -108,10 +108,10 @@ Self-provide tokens with factories when the value depends on the environment
 // ❌ Incorrect: read window at import time
 export const WINDOW = window
 
-// ✅ Correct: factory token — null-safe outside the browser
-export const WINDOW = new InjectionToken<Window | null>('Window', {
+// ✅ Correct: factory token — undefined outside the browser
+export const WINDOW = new InjectionToken<Window | undefined>('Window', {
   providedIn: 'root',
-  factory: () => (typeof window !== 'undefined' ? window : null),
+  factory: () => (typeof window !== 'undefined' ? window : undefined),
 })
 ```
 
@@ -127,6 +127,7 @@ factories unless the repo already uses them).
   multi: true,
   useFactory: () => {
     const configService = inject(ConfigService)
+
     return () => configService.loadConfig()
   },
 }
@@ -134,6 +135,7 @@ factories unless the repo already uses them).
 // ✅ Correct: provideAppInitializer
 provideAppInitializer(() => {
   const configService = inject(ConfigService)
+
   return configService.loadConfig()
 })
 ```

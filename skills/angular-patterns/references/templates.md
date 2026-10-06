@@ -81,6 +81,32 @@ template — move that to `computed` or helpers.
 {{ activeUserCount() }}
 ```
 
+## Name template values with @let
+
+Name a value once with `@let` instead of repeating the same signal chain or
+wrapping markup in `*ngIf` just to get an alias.
+`*ngIf="cartItemCount() as itemCount"` hides the content when the count is
+`0`, and the `{ itemCount: cartItemCount() } as cartView` object trick only
+exists to work around that.
+
+```html
+<!-- ❌ Incorrect: repeated signal chains / *ngIf object trick only to alias values -->
+<ng-container *ngIf="{ itemCount: cartItemCount() } as cartView">
+  <p>{{ cartView.itemCount }} items</p>
+</ng-container>
+<p>{{ customer().shippingAddress.city }}, {{ customer().shippingAddress.country }}</p>
+
+<!-- ✅ Correct: @let names each value once; no fake conditional -->
+@let itemCount = cartItemCount();
+@let shippingAddress = customer().shippingAddress;
+<p>{{ itemCount }} items</p>
+<p>{{ shippingAddress.city }}, {{ shippingAddress.country }}</p>
+```
+
+- `@let` is read-only and visible to the rest of its view, including nested
+  blocks. It names a value — derived logic still belongs in `computed`.
+- Need the null check too? Use `@if (selectedUser(); as user)` instead.
+
 ## Defer and images
 
 Use `@defer` for below-fold or heavy UI. Prefer `NgOptimizedImage` for static

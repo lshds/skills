@@ -16,6 +16,17 @@ Model state in a signal. Wrap it with `form()` and a schema. Bind controls with
 `[formField]`. Import `FormField` on the component.
 
 ```typescript
+import { Component, signal } from '@angular/core'
+import { FormControl, FormGroup } from '@angular/forms'
+import {
+  FormField,
+  email,
+  form,
+  minLength,
+  pattern,
+  required,
+} from '@angular/forms/signals'
+
 // ❌ Incorrect: untyped FormGroup / template-driven mix on greenfield
 loginForm = new FormGroup({
   email: new FormControl(''),
@@ -68,9 +79,13 @@ Hold the array on the model signal. Validate each item with `applyEach`. Add
 and remove rows by updating the model — the field tree follows.
 
 ```typescript
-// ❌ Incorrect: rebuild the whole form to add a row
+import { signal } from '@angular/core'
+import { applyEach, form, min, required } from '@angular/forms/signals'
+
+// ❌ Incorrect: rebuild the whole form to add a row — field state resets
 addOrderItem() {
-  this.orderForm = form(signal({ items: [/* all previous + new */] }))
+  const nextItems = [...this.orderModel().items, { product: '', quantity: 1 }]
+  this.orderForm = form(signal({ items: nextItems }))
 }
 
 // ✅ Correct: applyEach + immutable model update
@@ -120,9 +135,12 @@ Put rules on the schema — don’t only check in submit. Use `validate()` for
 cross-field rules.
 
 ```typescript
+import { signal } from '@angular/core'
+import { form, minLength, required, validate } from '@angular/forms/signals'
+
 // ❌ Incorrect: only check equality in submit — no field error state
-submitLoginForm() {
-  if (this.loginModel().password !== this.loginModel().confirmPassword) {
+submitPasswordForm() {
+  if (this.passwordModel().password !== this.passwordModel().confirmPassword) {
     return
   }
 }
@@ -154,6 +172,8 @@ the action when the form is invalid. Submit the model signal, not a parallel
 object.
 
 ```typescript
+import { submit } from '@angular/forms/signals'
+
 // ❌ Incorrect: submit without going through submit()
 async submitLoginForm() {
   await this.authApi.submit(this.loginModel())
@@ -191,6 +211,99 @@ Render `errors()` on the field after touch — not a single global banner only.
 }
 ```
 
+## Custom controls with FormValueControl
+
+A custom control for Signal Forms implements `FormValueControl<T>` and exposes
+its value as a `model()` — `[formField]` keeps that model and the field in
+sync. A new `ControlValueAccessor` adds a provider and callback plumbing that
+Signal Forms doesn’t need.
+
+```typescript
+import { Component, forwardRef, model, signal } from '@angular/core'
+import { NG_VALUE_ACCESSOR } from '@angular/forms'
+import type { ControlValueAccessor } from '@angular/forms'
+import type { FormValueControl } from '@angular/forms/signals'
+
+// ❌ Incorrect: new ControlValueAccessor for a Signal Forms control
+@Component({
+  selector: 'app-clearable-input',
+  providers: [
+    {
+      provide: NG_VALUE_ACCESSOR,
+      useExisting: forwardRef(() => ClearableInput),
+      multi: true,
+    },
+  ],
+  template: `
+    <input
+      #textInput
+      [value]="text()"
+      (input)="updateText(textInput.value)"
+      (blur)="markTouched()"
+    />
+    <button type="button" (click)="updateText('')">Clear</button>
+  `,
+})
+export class ClearableInput implements ControlValueAccessor {
+  protected readonly text = signal('')
+  private notifyChange: (text: string) => void = () => {}
+  private notifyTouched: () => void = () => {}
+
+  writeValue(text: string) {
+    this.text.set(text)
+  }
+
+  registerOnChange(onChange: (text: string) => void) {
+    this.notifyChange = onChange
+  }
+
+  registerOnTouched(onTouched: () => void) {
+    this.notifyTouched = onTouched
+  }
+
+  updateText(text: string) {
+    this.text.set(text)
+    this.notifyChange(text)
+  }
+
+  markTouched() {
+    this.notifyTouched()
+  }
+}
+
+// ✅ Correct: FormValueControl — the value model is the whole contract
+@Component({
+  selector: 'app-clearable-input',
+  template: `
+    <input
+      #textInput
+      [value]="value()"
+      (input)="value.set(textInput.value)"
+      (blur)="touched.set(true)"
+    />
+    <button type="button" (click)="value.set('')">Clear</button>
+  `,
+})
+export class ClearableInput implements FormValueControl<string> {
+  readonly value = model('')
+  readonly touched = model(false)
+}
+```
+
+```html
+<!-- ✅ Correct: bound like a native input -->
+<app-clearable-input [formField]="profileForm.nickname" />
+```
+
+- Boolean controls (switches, custom checkboxes) implement
+  `FormCheckboxControl` with `readonly checked = model(false)` instead of a
+  `value` model.
+- `value` (or `checked`) is the only required member. Declare optional inputs
+  such as `disabled`, `required`, or `errors` only when the control renders
+  them — the field state fills them.
+- Existing `ControlValueAccessor` components in Reactive Forms code stay as
+  they are.
+
 ## Reactive Forms
 
 When the repo already uses `FormGroup` / `NonNullableFormBuilder`, keep that
@@ -198,11 +311,11 @@ stack for new forms in the same app. Don’t start Signal Forms beside it unless
 the user asks to migrate.
 
 ```typescript
-// ❌ Incorrect: new Signal Forms stack beside existing FormGroup
-private readonly formBuilder = inject(NonNullableFormBuilder)
-readonly legacyProfileForm = this.formBuilder.group({
-  email: this.formBuilder.control('', { validators: [Validators.email] }),
-})
+import { inject, signal } from '@angular/core'
+import { NonNullableFormBuilder, Validators } from '@angular/forms'
+import { form } from '@angular/forms/signals'
+
+// ❌ Incorrect: Signal Forms beside the repo’s existing FormGroup forms
 readonly profileModel = signal({ email: '' })
 readonly profileForm = form(this.profileModel)
 
@@ -210,26 +323,25 @@ readonly profileForm = form(this.profileModel)
 private readonly formBuilder = inject(NonNullableFormBuilder)
 readonly profileForm = this.formBuilder.group({
   email: ['', [Validators.required, Validators.email]],
-  password: ['', [Validators.required, Validators.minLength(8)]],
 })
 ```
 
-Build with `NonNullableFormBuilder` so reset doesn’t widen to `null`. Push and
-remove `FormArray` rows instead of rebuilding the group. Bind with
-`formArrayName` / `formGroupName` and `@for`. Put sync, cross-field, and async
-validators on the control — not only in submit. On submit, `markAllAsTouched`
-when invalid, then `getRawValue()`.
+Grow arrays in place and surface errors before submitting.
 
 ```typescript
-// ❌ Incorrect: recreate the whole form to add a row
-addOrderItem() {
-  this.orderForm = this.formBuilder.group({
-    items: [this.createOrderItem()],
-  })
+import { inject } from '@angular/core'
+import { NonNullableFormBuilder, Validators } from '@angular/forms'
+
+// ❌ Incorrect: submit an invalid form without surfacing errors
+async submitOrder() {
+  await this.orderApi.submit(this.orderForm.value)
 }
 
-// ✅ Correct: FormArray push
-orderForm = this.formBuilder.group({
+// ✅ Correct: FormArray push; markAllAsTouched when invalid, then getRawValue
+private readonly formBuilder = inject(NonNullableFormBuilder)
+private readonly orderApi = inject(OrderApi)
+
+readonly orderForm = this.formBuilder.group({
   items: this.formBuilder.array([this.createOrderItem()]),
 })
 
@@ -240,45 +352,78 @@ get orderItems() {
 addOrderItem() {
   this.orderItems.push(this.createOrderItem())
 }
-```
 
-```typescript
-// ❌ Incorrect: submit invalid form without surfacing errors
-async submitLoginForm() {
-  await this.authApi.submit(this.loginForm.value)
-}
-
-// ✅ Correct: markAllAsTouched; submit getRawValue
-async submitLoginForm() {
-  if (this.loginForm.invalid) {
-    this.loginForm.markAllAsTouched()
+async submitOrder() {
+  if (this.orderForm.invalid) {
+    this.orderForm.markAllAsTouched()
     return
   }
 
-  await this.authApi.submit(this.loginForm.getRawValue())
-  this.loginForm.reset()
+  await this.orderApi.submit(this.orderForm.getRawValue())
+  this.orderForm.reset()
 }
+
+private createOrderItem() {
+  return this.formBuilder.group({
+    product: ['', Validators.required],
+    quantity: [1, [Validators.required, Validators.min(1)]],
+  })
+}
+```
+
+- Build with `NonNullableFormBuilder` so `reset()` doesn’t widen values to
+  `null`.
+- `push` / `removeAt` on the `FormArray` — rebuilding the group to add a row
+  drops every row’s value and touched state.
+- Bind rows with `formArrayName="items"`, then
+  `@for (orderItem of orderItems.controls; track $index; let itemIndex = $index)`
+  around `[formGroupName]="itemIndex"` and `formControlName` inputs — not
+  `*ngFor` + `ngModel`.
+- Put sync, cross-field, and async validators on the controls — not only in
+  submit — and render per-field errors when the control is invalid and touched
+  (`profileForm.controls.email.errors?.['required']`).
+
+## Migrate incrementally
+
+Only during an approved migration from Reactive Forms: bridge the two stacks
+one control at a time instead of rewriting a large form in one change. Remove
+the bridge once the form is fully on Signal Forms — it is not an end state.
+
+```typescript
+import { signal } from '@angular/core'
+import { FormControl, FormGroup } from '@angular/forms'
+import { required } from '@angular/forms/signals'
+import { SignalFormControl, compatForm } from '@angular/forms/signals/compat'
+
+// ✅ Correct: signal form that still embeds an existing reactive control
+readonly billingAddressControl = new FormControl('', { nonNullable: true })
+readonly checkoutModel = signal({
+  email: '',
+  billingAddress: this.billingAddressControl,
+})
+readonly checkoutForm = compatForm(this.checkoutModel, (schemaPath) => {
+  required(schemaPath.email)
+})
+
+// ✅ Correct: signal-form leaf inside an existing FormGroup
+readonly nicknameControl = new SignalFormControl('', (nickname) => {
+  required(nickname)
+})
+readonly profileForm = new FormGroup({
+  nickname: this.nicknameControl,
+  email: new FormControl('', { nonNullable: true }),
+})
 ```
 
 ```html
-<!-- ❌ Incorrect: unbound inputs / *ngFor without formArrayName -->
-<div *ngFor="let orderItem of orderItems; let itemIndex = index">
-  <input [(ngModel)]="orderItem.product" />
-</div>
-
-<!-- ✅ Correct: formArrayName + formGroupName + @for -->
-<div formArrayName="items">
-  @for (orderItem of orderItems.controls; track $index; let itemIndex = $index) {
-    <div [formGroupName]="itemIndex">
-      <input formControlName="product" />
-    </div>
-  }
-</div>
-
-<input formControlName="email" />
-@if (loginForm.controls.email.invalid && loginForm.controls.email.touched) {
-  @if (loginForm.controls.email.errors?.['required']) {
-    <span>Email is required</span>
-  }
-}
+<!-- ✅ Correct: SignalFormControl binds through its fieldTree -->
+<form [formGroup]="profileForm">
+  <input [formField]="nicknameControl.fieldTree" />
+  <input formControlName="email" />
+</form>
 ```
+
+- `compatForm` wraps an existing `FormGroup` / `FormControl` inside a signal
+  form — the new parent moves first, reactive children follow later.
+- `SignalFormControl` goes the other way: a signal-form leaf inside an existing
+  `FormGroup`, bound with `[formField]` on its `.fieldTree`.

@@ -61,6 +61,7 @@ methods — don’t expose raw DOM event names on the public API.
 ```typescript
 // ❌ Incorrect: public API named after the DOM event
 readonly click = output<void>()
+
 onClick() {
   this.click.emit()
 }
