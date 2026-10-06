@@ -9,11 +9,11 @@ Passing a user-controlled URL directly to `fetch` lets attackers probe internal 
 
 ```typescript
 // ❌ Incorrect: user-controlled URL passed to fetch
-const response = await fetch(String(request.query.url))
+await fetch(String(request.body.webhookUrl))
 
 // ❌ Incorrect: prefix check alone — https://trusted.com.evil.com bypasses startsWith
-if (String(request.query.url).startsWith('https://trusted.com')) {
-  await fetch(String(request.query.url))
+if (String(request.body.webhookUrl).startsWith('https://trusted.com')) {
+  await fetch(String(request.body.webhookUrl))
 }
 
 // ✅ Correct: allowlist scheme and host; block link-local/metadata ranges
@@ -32,8 +32,8 @@ export function assertSafeUrl(rawUrl: string) {
 
   try {
     parsedUrl = new URL(rawUrl)
-  } catch (cause) {
-    throw new UnsafeUrlError('invalid url', { cause })
+  } catch (error) {
+    throw new UnsafeUrlError('invalid url', { cause: error })
   }
 
   if (

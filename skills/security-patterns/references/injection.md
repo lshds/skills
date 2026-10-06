@@ -9,7 +9,7 @@ Concatenating request values into SQL bypasses access controls and can exfiltrat
 
 ```typescript
 // ❌ Incorrect: SQL string interpolation from request input
-const rows = await database.query(
+const userRows = await database.query(
   `SELECT * FROM users WHERE email = '${request.query.email}'`,
 )
 
@@ -20,7 +20,7 @@ if (typeof email !== 'string') {
   throw new Error('email required')
 }
 
-const rows = await database.query('SELECT * FROM users WHERE email = $1', [
+const userRows = await database.query('SELECT * FROM users WHERE email = $1', [
   email,
 ])
 const user = await database.user.findUnique({ where: { email } })
@@ -39,7 +39,7 @@ const users = await usersCollection.find({
 })
 
 // ❌ Incorrect: $where with interpolated input
-const documents = await usersCollection.find({
+const users = await usersCollection.find({
   $where: `this.email === '${request.query.email}'`,
 })
 
@@ -73,6 +73,7 @@ const USER_QUERY = `
     }
   }
 `
+
 const userId = request.query.id
 
 if (typeof userId !== 'string') {
@@ -90,10 +91,10 @@ await graphqlClient.request(USER_QUERY, { id: userId })
 Server-side template engines that evaluate user strings as code (or rich template syntax) enable RCE or XSS in rendered output.
 
 ```typescript
-import { render } from 'ejs'
+import { render, renderFile } from 'ejs'
 
 // ❌ Incorrect: user string compiled as a template
-const unsafeMarkup = await render(request.body.template, { user })
+const renderedHtml = render(request.body.template, { user })
 
 // ✅ Correct: fixed template file; user values as data only
 const displayName = request.body.displayName
@@ -102,7 +103,7 @@ if (typeof displayName !== 'string') {
   throw new Error('displayName required')
 }
 
-const renderedHtml = await render('profile.ejs', { displayName })
+const renderedHtml = await renderFile('profile.ejs', { displayName })
 ```
 
 - Never `eval`, `new Function`, or compile templates from request/body content.

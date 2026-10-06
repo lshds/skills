@@ -2,7 +2,9 @@
 
 Install CI and production from the committed lockfile. Treat lifecycle
 scripts as code execution only when this repo’s package manager will run them.
-If anything is uncertain, always ask — do not guess.
+If anything is uncertain, always ask — do not guess. Which package manager to
+use and asking before adding a dependency are general dependency rules, not
+repeated here.
 
 ## Lockfile integrity
 
@@ -130,3 +132,44 @@ pnpm view helpful-utils scripts
 bun info helpful-utils scripts
 yarn npm info helpful-utils scripts
 ```
+
+## Harden installs and publishing against worms
+
+The September 2025 "Shai-Hulud" npm worm spread through install scripts and
+stolen publish tokens: one compromised maintainer token published infected
+versions that ran on every machine that installed them. A malicious version
+does most of its damage in the hours after it is published, before it is
+reported and pulled.
+
+```yaml
+# ❌ Incorrect: pnpm-workspace.yaml with no release-age delay (default 0)
+minimumReleaseAge: 0
+
+# ✅ Correct: wait one day (value in minutes; pnpm 10.16+) before installing a brand-new version
+minimumReleaseAge: 1440
+```
+
+```bash
+# ❌ Incorrect: long-lived publish token in CI — whoever steals it publishes as you
+echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+npm publish
+
+# ✅ Correct: npm trusted publishing (OIDC from CI, no stored token) with provenance
+npm publish --provenance
+```
+
+- Keep install scripts blocked by default and grant them per package from an
+  allow-list: pnpm `allowBuilds` or `onlyBuiltDependencies` (whichever the
+  installed pnpm reads), Bun `trustedDependencies`, Yarn `dependenciesMeta`.
+  On an npm version that still runs dependency scripts by default, set
+  `ignore-scripts=true` in `.npmrc` and run the reviewed native builds
+  explicitly.
+- Delay brand-new versions with pnpm `minimumReleaseAge`; lift the delay for
+  a single package only for an urgent security fix you have checked.
+- Publish packages through npm trusted publishing: the CI job exchanges an
+  OIDC identity for a short-lived credential, so there is no token to steal.
+  `--provenance` links the published tarball to the commit and workflow that
+  built it.
+- When a token is unavoidable (a registry or CI without OIDC), use a
+  granular access token scoped to the packages it publishes, with an expiry,
+  and require 2FA on the account.

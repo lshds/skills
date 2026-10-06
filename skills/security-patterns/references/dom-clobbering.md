@@ -23,9 +23,9 @@ export function sanitizeClobberableHtml(unsafeHtml: string) {
     'text/html',
   )
 
-  parsedDocument.querySelectorAll('[id], [name]').forEach((node) => {
-    node.removeAttribute('id')
-    node.removeAttribute('name')
+  parsedDocument.querySelectorAll('[id], [name]').forEach((element) => {
+    element.removeAttribute('id')
+    element.removeAttribute('name')
   })
 
   return parsedDocument.body.innerHTML

@@ -3,37 +3,37 @@ name: security-patterns
 description: >-
   Security guidelines for TypeScript / Bun / Expo / Vite / Next applications.
   This skill should be used when writing, reviewing, or auditing authn/authz,
-  secrets, injection, XSS, SSRF, client token/env handling, or supply-chain
-  installs to ensure high-confidence trust-boundary controls. Prefer
-  source→sink confirmation over pattern-match alerts. Triggers on Server
-  Actions, IDOR, JWT/cookies, public env prefixes, SecureStore, Docker
-  hardening, lockfile, npm/pnpm/yarn/bun audit, postinstall,
-  trustedDependencies, allowBuilds, allowScripts, or OWASP-style reviews.
+  secrets, injection, XSS, CSRF, SSRF, or supply-chain installs to ensure
+  high-confidence trust-boundary controls. Prefer source→sink confirmation over
+  pattern-match alerts. Triggers on authorization inside Server Actions, IDOR,
+  passkeys, JWT/cookies, CSP, Trusted Types, Sec-Fetch-Site, public env prefixes,
+  SecureStore, Docker hardening, lockfile, minimumReleaseAge, postinstall,
+  trustedDependencies, allowBuilds, allowScripts, dependency audit, or OWASP reviews.
 ---
 
 # Security Skills
 
 Security for TypeScript / Bun / Expo / Vite / Next: trust boundaries, authn/authz,
-injection, secrets, supply chain, and related threats. Prefer HIGH-confidence
-controls with confirmed attacker-controlled input.
+injection, secrets, and supply chain. Prefer HIGH-confidence controls with
+confirmed attacker-controlled input.
 
 **Domain:** trust-boundary controls for TypeScript / Bun / Expo / Vite / Next
 applications.
-**Owns:** authn/authz, injection, XSS, SSRF, CSRF, secrets and public env
-prefixes, file uploads/paths, Docker hardening, supply-chain installs,
-misconfiguration, prototype pollution, DOM clobbering, WebSocket, LLM prompt
-injection; write vs audit output.
+**Owns:** authn/authz, injection, XSS, SSRF, CSRF, secrets and public env prefixes,
+file uploads/paths, Docker hardening, supply-chain installs, misconfiguration (CORS,
+headers, CSP, Trusted Types), prototype pollution, DOM clobbering, WebSocket, LLM
+prompt injection; write vs audit output.
 **Does not own:** HTTP resource design and envelopes; in-process error taxonomy;
 request-thread I/O placement; schema modeling.
 
 ## When to activate
 
 - Writing or hardening handlers, Server Actions, or auth-protected routes
-- Choosing token transport, session cookies, or client/native secret storage
-- Adding runtime validation, parameterized queries, or URL/redirect allowlists
+- Choosing passkeys, password hashing, token transport, session cookies, or client/native secret storage
+- Adding runtime validation, parameterized queries, URL/redirect allowlists, or CSRF origin checks
 - Reviewing authn/authz, IDOR, mass assignment, injection, SSRF, or XSS sinks
 - Checking secrets, `.env`, or public env prefixes (`NEXT_PUBLIC_*` / `VITE_*` / `EXPO_PUBLIC_*`)
-- Hardening Dockerfile / Compose / container runtime, lockfile installs, install scripts, or trust/allow-builds lists
+- Setting CSP, Trusted Types, CORS, or security headers; hardening Dockerfiles, lockfile installs, or install-script grants
 - Assessing prototype pollution, DOM clobbering, WebSocket/CSWSH, or LLM prompt injection
 - Running a security review, dependency audit, or OWASP-style pass on a named scope
 
@@ -48,120 +48,80 @@ in code; no review report unless asked. **Audit** (security review, vuln pass,
 verification); use the report template in **Output Format**. If both appear, audit
 first, then implement — still one primary ref per finding/topic.
 
+### Match the repo
+
+Read installed versions from `package.json` and the lockfile (plus the auth library config, `Dockerfile`, and header/CSP config). Follow the patterns already in the tree; greenfield defaults apply only where nothing contradicts them. When code lags behind what the installed version supports, finish the task in the existing style, then propose the migration once — old → new, why, file count, risk — and wait for a yes. Never fold it into the current change. In review, report the gap as a finding instead.
+
+Version signals:
+
+- bcrypt / PBKDF2 password hashes → Argon2id with rehash on the next successful login (when an Argon2id implementation is already available in the runtime or installed libraries)
+- session cookie without a prefix → `__Host-` prefixed cookie (supported by all current browsers)
+- CSRF tokens only → add a `Sec-Fetch-Site` check (evergreen browsers send Fetch Metadata)
+- CSP host allow-list or `'unsafe-inline'` scripts → nonce + `'strict-dynamic'` (CSP Level 3; all current browsers)
+- `FROM oven/bun:1-slim` → `FROM oven/bun:1-slim@sha256:<digest>` (any Docker / BuildKit)
+
 ### Audit confidence
 
-Before reporting, confirm: (1) source → sink, (2) no validation/sanitization on
-the path, (3) config / middleware / framework defaults do not already block it.
-HIGH = report with severity; MEDIUM = Needs verification only; LOW = do not
-report. Default: HIGH only. Do not flag tests (unless reviewing test security),
-dead/commented code, docs, or server-controlled config/env alone. Auth-gated ≠
-safe — only report if authz is missing/broken after auth.
-
-### Attacker vs server-controlled
-
-| Investigate | Usually not a vuln alone |
-| --- | --- |
-| `request.body` / query / path | `process.env`, deploy config |
-| Headers, cookies (unsigned) | Hardcoded constants |
-| Uploads, Expo deep links | Signed session values |
-| Other users’ stored data | Internal URLs from config |
-
-Trace source → sink before flagging (audit) or before trusting a value in new
-code (write).
-
-### Validate at boundary
-
-Runtime schema (types/casts are not enough), rate limits, response field
-filtering. Not IDOR/mass assignment; not CORS. See
-[api-security.md](references/api-security.md).
+Report only after confirming source → sink, no sanitization on the path, and no
+framework or config mitigation. HIGH = report; MEDIUM = Needs verification; LOW
+= skip. Classify attacker- vs server-controlled values the same way before
+trusting one in new code. See [audit-method.md](references/audit-method.md).
 
 ### Authentication
 
-Sessions, credentials, JWT/cookies; tokens in headers or httpOnly cookies, not
-query strings. Expo deep links: allowlisted paths, one-time codes — not access
-tokens in the URL. See [authentication.md](references/authentication.md).
+Passkeys (WebAuthn) as primary sign-in when the product allows. Passwords:
+Argon2id, NIST SP 800-63B-4 length rules, no composition or forced rotation.
+Session cookies `__Host-` + `HttpOnly` + `Secure` + `SameSite=Lax`; tokens never
+in query strings or Expo deep links. See [authentication.md](references/authentication.md).
 
 ### Authorization
 
 Object-level access (IDOR), privilege checks, mass assignment / allowlist
-updates. Auth **inside** Server Actions and exported handlers — Next middleware
-or layout alone is not enough. Not token transport. See
+updates. Authn + authz **inside** every Server Action and exported handler —
+Next middleware or a layout alone is not enough. See
 [authorization.md](references/authorization.md).
 
 ### Injection
 
 Parameterized queries / ORM binds; never string-interpolate SQL, NoSQL filters,
 GraphQL documents, templates, or shell. No `exec` / `spawn({ shell: true })` /
-`Bun.$` with user-influenced strings. See
-[injection.md](references/injection.md).
-
-### SSRF
-
-User-controlled URL into `fetch` or redirect → allowlist scheme/host;
-server-configured base URLs are fine. See [ssrf.md](references/ssrf.md).
-
-### XSS
-
-JSX text interpolation is escaped — do not flag by default. Flag
-`dangerouslySetInnerHTML` and user-controlled `href`/`src`/`action`. See
-[xss.md](references/xss.md).
+`Bun.$` with user-influenced strings. See [injection.md](references/injection.md).
 
 ### CSRF
 
-Cookie/session auth on mutating browser endpoints: CSRF token lifecycle +
-SameSite. Not CORS. See [csrf.md](references/csrf.md).
+Cookie-authenticated state changes: SameSite=Lax plus a `Sec-Fetch-Site` /
+`Origin` check first; tokens for legacy and non-browser clients. Server Actions
+check Origin automatically; custom Route Handlers don’t. Not CORS. See
+[csrf.md](references/csrf.md).
 
 ### Secrets and client leak
 
-No hardcoded secrets in source or logs. `NEXT_PUBLIC_*` / `VITE_*` /
-`EXPO_PUBLIC_*` ship to the client. Prefer httpOnly Secure cookies; else
-short-lived web storage (XSS risk); native SecureStore — not AsyncStorage. See
+`NEXT_PUBLIC_*` / `VITE_*` / `EXPO_PUBLIC_*` ship to the client — secrets never
+use those prefixes. Tokens: httpOnly Secure cookies; else short-lived web storage
+(XSS risk); native SecureStore — not AsyncStorage. See
 [data-protection.md](references/data-protection.md).
-
-### File security
-
-Uploads (type/size) and paths built from user input — resolve under an
-allowlisted root. See [file-security.md](references/file-security.md).
-
-### Docker
-
-Non-root user, pinned base image; secrets at runtime only; `.dockerignore`
-excludes `.env` and keys. See [docker.md](references/docker.md).
 
 ### Supply chain
 
-Install CI/prod from the committed lockfile; treat install scripts as
-execution only when this manager will run them (npm `allowScripts`, pnpm
-`allowBuilds`, Bun default allowlist or `trustedDependencies`, Yarn
-`enableScripts` / `dependenciesMeta`); run the repo’s dependency audit.
-If anything is uncertain, always ask. See
-[supply-chain.md](references/supply-chain.md).
+Install CI/prod from the committed lockfile; treat install scripts as execution
+only when this manager will run them (npm `allowScripts`, pnpm `allowBuilds`, Bun
+default allowlist or `trustedDependencies`, Yarn `enableScripts` /
+`dependenciesMeta`); delay brand-new versions (pnpm `minimumReleaseAge`); publish
+via trusted publishing + provenance; run the repo’s dependency audit. If anything
+is uncertain, ask. See [supply-chain.md](references/supply-chain.md).
 
-### Misconfiguration
+### Other trust boundaries
 
-CORS allowlist, security headers, no debug/stack leaks in production. See
-[misconfiguration.md](references/misconfiguration.md).
-
-### Prototype pollution
-
-Deep-merge of untrusted JSON must skip `__proto__` / `constructor` /
-`prototype`; prefer null-prototype objects or `Map`. See
-[prototype-pollution.md](references/prototype-pollution.md).
-
-### DOM clobbering
-
-Untrusted HTML `id`/`name` can shadow `document` APIs — use `window.*` and strip
-clobberable attributes. See [dom-clobbering.md](references/dom-clobbering.md).
-
-### WebSocket
-
-Origin allowlist, authenticate before actions, validate message shape; avoid
-tokens in query strings. See [websocket.md](references/websocket.md).
-
-### LLM prompt injection
-
-Delimit untrusted document content; never follow instructions inside it; validate
-model output shape. See [llm-prompt-injection.md](references/llm-prompt-injection.md).
+- **API edge:** runtime schema (types/casts are not enough), rate limits, response field filtering — not IDOR or CORS ([api-security.md](references/api-security.md))
+- **XSS:** JSX text is escaped — don’t flag it; flag `dangerouslySetInnerHTML` and user-controlled `href`/`src`/`action` ([xss.md](references/xss.md))
+- **SSRF:** user-controlled URL into `fetch` or a redirect → allowlist scheme/host; server-configured base URLs are fine ([ssrf.md](references/ssrf.md))
+- **Files:** check upload type/size; resolve user paths under an allowlisted root ([file-security.md](references/file-security.md))
+- **Docker:** digest-pinned base, minimal non-root runtime, BuildKit secret mounts, SBOM + provenance ([docker.md](references/docker.md))
+- **Misconfiguration:** CORS allowlist, security headers, nonce-based CSP, Trusted Types report-only first, no debug leaks ([misconfiguration.md](references/misconfiguration.md))
+- **Prototype pollution:** deep-merge skips `__proto__` / `constructor` / `prototype`; prefer null-prototype objects or `Map` ([prototype-pollution.md](references/prototype-pollution.md))
+- **DOM clobbering:** untrusted `id`/`name` shadow `document` APIs — use `window.*`, strip those attributes ([dom-clobbering.md](references/dom-clobbering.md))
+- **WebSocket:** origin allowlist, auth before actions, validated messages, no query-string tokens ([websocket.md](references/websocket.md))
+- **LLM prompt injection:** delimit untrusted content, never follow its instructions, validate output shape ([llm-prompt-injection.md](references/llm-prompt-injection.md))
 
 ### Common mistakes
 
@@ -177,15 +137,9 @@ model output shape. See [llm-prompt-injection.md](references/llm-prompt-injectio
 
 ## Workflow
 
-1. Detect Write vs Audit from the user ask (Write vs audit).
-2. Open only the matching Practice areas ref — don’t load every file.
-3. **Write:** implement or harden against Core Concepts and Common mistakes;
-   ship safe code; skip the report template unless the user asks for a review
-   write-up.
-4. **Audit:** confirm each finding with Audit confidence; report each issue once
-   under its primary category. Use Output Format (or when the user explicitly
-   asks for a security review write-up). If none: "No high-confidence
-   vulnerabilities identified."
+1. Detect Write vs Audit from the user ask; open only the matching Practice areas ref.
+2. **Write:** implement or harden against Core Concepts and Common mistakes; skip the report template unless the user asks for a review write-up.
+3. **Audit:** confirm each finding with Audit confidence; report each issue once under its primary category using Output Format. If none: "No high-confidence vulnerabilities identified."
 
 ## Output Format
 
@@ -223,18 +177,19 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
+| Audit confidence / source → sink / attacker vs server-controlled / non-findings | [audit-method.md](references/audit-method.md) |
 | Input validation / rate limits / response filtering | [api-security.md](references/api-security.md) |
-| Authn / JWT / session cookies / token transport / Expo deep links | [authentication.md](references/authentication.md) |
-| IDOR / privilege / mass assignment / Actions authz / Next middleware limits | [authorization.md](references/authorization.md) |
+| Passkeys / WebAuthn / Argon2id / bcrypt rehash / NIST password policy / JWT / `__Host-` session cookies / token transport / Expo deep links | [authentication.md](references/authentication.md) |
+| IDOR / privilege / mass assignment / authorization inside Server Actions / Next middleware limits | [authorization.md](references/authorization.md) |
 | SQL / NoSQL / GraphQL / template / command injection (incl. Bun) | [injection.md](references/injection.md) |
 | SSRF / open redirects | [ssrf.md](references/ssrf.md) |
-| XSS sinks / URL attributes | [xss.md](references/xss.md) |
-| CSRF tokens / SameSite | [csrf.md](references/csrf.md) |
+| XSS sinks / URL attributes / Trusted Types | [xss.md](references/xss.md) |
+| CSRF / `Sec-Fetch-Site` / Origin check / Server Actions `allowedOrigins` / Route Handlers / tokens / SameSite | [csrf.md](references/csrf.md) |
 | Secrets / public env / token storage / logs | [data-protection.md](references/data-protection.md) |
 | Uploads / path traversal | [file-security.md](references/file-security.md) |
-| Dockerfile / `.dockerignore` / runtime secrets | [docker.md](references/docker.md) |
-| Lockfile / dependency audit / install scripts / allowScripts / trustedDependencies / allowBuilds | [supply-chain.md](references/supply-chain.md) |
-| CORS / headers / production errors | [misconfiguration.md](references/misconfiguration.md) |
+| Dockerfile / digest pinning / distroless / non-root / BuildKit secrets / SBOM / provenance / `.dockerignore` | [docker.md](references/docker.md) |
+| Lockfile / dependency audit / install scripts / allowScripts / trustedDependencies / allowBuilds / minimumReleaseAge / trusted publishing / provenance | [supply-chain.md](references/supply-chain.md) |
+| CORS / headers / production errors / CSP nonce / `'strict-dynamic'` / Trusted Types | [misconfiguration.md](references/misconfiguration.md) |
 | Prototype pollution / deep merge | [prototype-pollution.md](references/prototype-pollution.md) |
 | DOM clobbering via `id` / `name` | [dom-clobbering.md](references/dom-clobbering.md) |
 | WebSocket origin / auth / CSWSH | [websocket.md](references/websocket.md) |

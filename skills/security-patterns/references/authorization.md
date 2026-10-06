@@ -23,14 +23,16 @@ export async function deleteUser(userId: string) {
 
 Same rule for Express/Fastify route handlers and Next.js Server Actions — gate in the exported function body.
 
-## Next.js middleware is not the authz boundary
+## Next.js proxy is not the authz boundary
 
-`middleware.ts` / `proxy` matchers protect navigations and some route handlers, but **Server Actions**, route handlers outside the matcher, and direct `"use server"` calls can still run without that gate. Treat middleware as defense-in-depth for pages — not as the only check.
+`proxy.ts` (named `middleware.ts` before Next.js 16) matchers protect navigations and some route handlers, but **Server Actions**, route handlers outside the matcher, and direct `'use server'` calls can still run without that gate. Treat the proxy as defense-in-depth for pages — not as the only check.
 
 ```typescript
-// ❌ Incorrect: auth only in middleware — Server Action still callable without the gate
-// middleware.ts
-export function middleware(request: NextRequest) {
+// ❌ Incorrect: auth only in the proxy — the Server Action is still callable without the gate
+// proxy.ts
+import { NextResponse, type NextRequest } from 'next/server'
+
+export function proxy(request: NextRequest) {
   const sessionCookie = request.cookies.get('session')
 
   if (!sessionCookie) {
@@ -44,12 +46,16 @@ export const config = {
   matcher: ['/dashboard/:path*'],
 }
 
-// app/actions.ts — not covered by trusting middleware alone
+// app/actions.ts — not covered by trusting the proxy alone
+'use server'
+
 export async function deleteOrder(orderId: string) {
   await database.order.delete({ where: { id: orderId } })
 }
 
-// ✅ Correct: authn + authz inside the Server Action (middleware may still redirect UI)
+// ✅ Correct: authn + authz inside the Server Action (the proxy may still redirect UI)
+'use server'
+
 export async function deleteOrder(orderId: string) {
   await assertCanDeleteOrder(orderId)
 
@@ -57,8 +63,8 @@ export async function deleteOrder(orderId: string) {
 }
 ```
 
-- Matcher gaps (`/api/*`, Server Actions, RSC mutations) mean middleware-only checks leave sinks open.
-- Vite SPAs have no Next middleware — put the same checks on the API/BFF handlers the client calls.
+- Matcher gaps (`/api/*`, Server Actions, RSC mutations) mean proxy-only checks leave sinks open.
+- Vite SPAs have no Next proxy — put the same checks on the API/BFF handlers the client calls.
 
 ## Object-level access
 
@@ -70,6 +76,11 @@ app.get('/api/orders/:id', requireAuth, async (request, response) => {
   const order = await database.order.findUnique({
     where: { id: request.params.id },
   })
+
+  if (!order) {
+    return response.sendStatus(404)
+  }
+
   response.json(order)
 })
 
@@ -100,6 +111,7 @@ app.patch('/api/users/:id', requireAuth, async (request, response) => {
     where: { id: request.params.id },
     data: { ...request.body },
   })
+
   response.json(user)
 })
 

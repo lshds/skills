@@ -14,6 +14,7 @@ import { z } from 'zod'
 app.post('/api/items', async (request, response) => {
   const itemInput = request.body as CreateItemInput
   await database.item.create({ data: itemInput })
+
   response.json({ ok: true })
 })
 
@@ -69,5 +70,5 @@ Serializing full database records can leak password hashes, secrets, and interna
 response.json(user)
 
 // ✅ Correct: return only fields the client needs
-response.json({ id: item.id, title: item.title, quantity: item.quantity })
+response.json({ id: user.id, email: user.email, displayName: user.displayName })
 ```

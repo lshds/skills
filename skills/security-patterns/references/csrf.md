@@ -1,20 +1,24 @@
 # CSRF
 
-Protect cookie-authenticated state changes with SameSite cookies and CSRF
-tokens. Browsers attach cookies to cross-site requests automatically.
+Prefer SameSite=Lax session cookies plus a Fetch Metadata (`Sec-Fetch-Site`)
+and `Origin` check on every cookie-authenticated state change over CSRF
+tokens alone, so forged cross-site requests are rejected before any handler
+logic runs. Browsers attach cookies to cross-site requests automatically.
+Keep CSRF tokens for legacy browsers and non-browser cookie clients.
 
 ## State-changing methods
 
-GET endpoints that mutate data can be triggered by `<img src="…">` or prefetch without user intent.
+GET endpoints that mutate data can be triggered by an `<img>` tag on another site or by prefetch, without user intent.
 
 ```typescript
-// ❌ Incorrect: state change via GET — <img src="…"> fires it
+// ❌ Incorrect: state change via GET — <img src="/api/transfer?to=attacker"> fires it
 app.get('/api/transfer', async (request, response) => {
   await transferFunds(
     request.session.userId,
     request.query.to,
     request.query.amount,
   )
+
   response.sendStatus(200)
 })
 
@@ -33,70 +37,81 @@ app.post('/api/transfer', async (request, response) => {
 - State changes via POST, PUT, PATCH, or DELETE only — never GET.
 - Bearer-token APIs from non-cookie clients are usually outside classic CSRF scope.
 
-## CSRF tokens and SameSite
+## Fetch Metadata and Origin first
 
-Cookie sessions without a CSRF check let forged cross-site POSTs run as the victim.
+Evergreen browsers label every request with `Sec-Fetch-Site` (`same-origin`,
+`same-site`, `cross-site`, or `none`) and send `Origin` on cross-origin and
+POST requests. A forged request from another site cannot fake either header,
+so checking them stops CSRF without token plumbing.
+
+```typescript
+const APP_ORIGIN = 'https://app.example.com'
+
+// ❌ Incorrect: cookie-authenticated mutation accepts requests from any site
+export async function POST(request: Request) {
+  await updateSettings(await requireSessionUserId(), await request.json())
+
+  return new Response(null, { status: 204 })
+}
+
+// ✅ Correct: reject cross-site state changes before touching the session
+export function isSameOriginRequest(request: Request) {
+  const fetchSite = request.headers.get('sec-fetch-site')
+
+  if (fetchSite) {
+    return fetchSite === 'same-origin'
+  }
+
+  return request.headers.get('origin') === APP_ORIGIN
+}
+
+export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) {
+    return new Response(null, { status: 403 })
+  }
+
+  await updateSettings(await requireSessionUserId(), await request.json())
+
+  return new Response(null, { status: 204 })
+}
+```
+
+- Run the check on every cookie-authenticated POST, PUT, PATCH, and DELETE.
+- Accept `same-site` only when sibling subdomains are meant to call the
+  endpoint; always reject `cross-site`.
+- Express: the same logic in a middleware before mutating routes, reading
+  `request.get('sec-fetch-site')` and `request.get('origin')`.
+- A request with neither header (very old browsers, non-browser cookie
+  clients) gets no pass — require a CSRF token instead.
+
+## Next.js Server Actions and Route Handlers
+
+Server Actions and Route Handlers look alike but get different built-in
+protection, so a check that exists for one is easy to assume for the other.
+
+- Server Actions compare `Origin` with `Host` / `X-Forwarded-Host`
+  automatically and reject mismatches. Behind a proxy or on a separate
+  public domain, list that origin in `serverActions.allowedOrigins` in
+  `next.config` instead of disabling the check.
+- Custom Route Handlers (`app/**/route.ts`) get no automatic check — add the
+  Fetch Metadata / Origin check to every cookie-authenticated mutating
+  handler.
+- The Origin check stops cross-site forgery only; every Server Action still
+  needs authn and authz inside its body.
+
+## CSRF tokens for legacy and non-browser clients
+
+When a client sends neither `Sec-Fetch-Site` nor `Origin`, a per-session
+token is the remaining proof that the request came from your page.
 
 ```typescript
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-
-// ❌ Incorrect: cookie session with no CSRF check on mutate
-app.post('/api/settings', async (request, response) => {
-  await updateSettings(request.session.userId, request.body)
-  response.sendStatus(200)
-})
-
-// ✅ Correct: issue token into session; verify on mutate; SameSite=Lax cookie
-interface CsrfSession {
-  userId?: string
-  csrfToken?: string
-}
-
-class CsrfError extends Error {
-  statusCode = 403
-  constructor(message = 'CSRF token mismatch', options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'CsrfError'
-  }
-}
-
-function isCsrfSession(value: unknown): value is CsrfSession {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-
-  if (
-    'csrfToken' in value &&
-    value.csrfToken !== undefined &&
-    typeof value.csrfToken !== 'string'
-  ) {
-    return false
-  }
-
-  if (
-    'userId' in value &&
-    value.userId !== undefined &&
-    typeof value.userId !== 'string'
-  ) {
-    return false
-  }
-
-  return true
-}
-
-function requireCsrfSession(sessionValue: unknown): CsrfSession {
-  if (!isCsrfSession(sessionValue)) {
-    throw new CsrfError('invalid session')
-  }
-
-  return sessionValue
-}
 
 export function createCsrfToken() {
   return randomBytes(32).toString('base64url')
 }
 
-export function assertCsrfToken(
+export function isValidCsrfToken(
   headerToken: string | undefined,
   sessionToken: string | undefined,
 ) {
@@ -105,54 +120,39 @@ export function assertCsrfToken(
     !sessionToken ||
     headerToken.length !== sessionToken.length
   ) {
-    throw new CsrfError()
+    return false
   }
 
-  if (
-    !timingSafeEqual(Buffer.from(headerToken), Buffer.from(sessionToken))
-  ) {
-    throw new CsrfError()
-  }
+  return timingSafeEqual(Buffer.from(headerToken), Buffer.from(sessionToken))
 }
 
-app.post('/api/login', async (request, response) => {
-  const session = requireCsrfSession(request.session)
-  const csrfToken = createCsrfToken()
-  request.session = { ...session, userId: user.id, csrfToken }
-
-  response.setHeader(
-    'Set-Cookie',
-    `session=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/`,
-  )
-  response.json({ csrfToken }) // client stores and sends as X-CSRF-Token
-})
-
-app.get('/api/csrf', async (request, response) => {
-  const session = requireCsrfSession(request.session)
-  const csrfToken = session.csrfToken ?? createCsrfToken()
-  request.session = { ...session, csrfToken }
-
-  response.json({ csrfToken })
-})
-
+// ❌ Incorrect: token read from the query string and compared with ===
 app.post('/api/settings', async (request, response) => {
-  const session = requireCsrfSession(request.session)
-  assertCsrfToken(request.headers['x-csrf-token'], session.csrfToken)
-  await updateSettings(session.userId, request.body)
+  if (request.query.csrfToken !== request.session.csrfToken) {
+    return response.sendStatus(403)
+  }
 
-  response.sendStatus(200)
+  await updateSettings(request.session.userId, request.body)
+
+  response.sendStatus(204)
 })
 
-await fetch('/api/settings', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'X-CSRF-Token': csrfToken,
-  },
-  credentials: 'include',
-  body: JSON.stringify(settingsUpdate),
+// ✅ Correct: token from a header, compared in constant time
+app.post('/api/settings', async (request, response) => {
+  if (
+    !isValidCsrfToken(request.get('x-csrf-token'), request.session.csrfToken)
+  ) {
+    return response.sendStatus(403)
+  }
+
+  await updateSettings(request.session.userId, request.body)
+
+  response.sendStatus(204)
 })
 ```
 
-- Do not put CSRF tokens in URLs — they leak via logs, Referer, and caches.
-- Send the token in a header (e.g. `X-CSRF-Token`), not the query string.
+- Issue the token into the session at login (and from a `GET /api/csrf`
+  endpoint), return it in the JSON body, and have the client send it as
+  `X-CSRF-Token` with `credentials: 'include'`.
+- Never put CSRF tokens in URLs — they leak via logs, Referer, and caches.
+- Rotate the token when the session is created or elevated.

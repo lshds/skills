@@ -10,7 +10,7 @@ instructions. Validate the output shape so a jailbreak cannot return a tool call
 
 ```typescript
 // ❌ Incorrect: direct concatenation — document content can override instructions
-export function summarizeWithRawPrompt(documentContent: string) {
+export function summarizeDocument(documentContent: string) {
   return llm.complete(`Summarize this document:\n${documentContent}`)
 }
 

@@ -8,22 +8,23 @@ change `Object.prototype` for every object.
 A polluted `isAdmin` on `Object.prototype` makes every object look authorized.
 
 ```typescript
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 // ❌ Incorrect: merge without dangerous-key checks — payload: {"__proto__":{"isAdmin":true}}
-function mergeDeep(
+export function mergeDeep(
   target: Record<string, unknown>,
   source: Record<string, unknown>,
 ) {
   for (const key of Object.keys(source)) {
     const sourceValue = source[key]
+    const targetValue = target[key]
 
-    if (
-      sourceValue &&
-      typeof sourceValue === 'object' &&
-      !Array.isArray(sourceValue)
-    ) {
+    if (isPlainObject(sourceValue)) {
       target[key] = mergeDeep(
-        (target[key] as Record<string, unknown>) ?? {},
-        sourceValue as Record<string, unknown>,
+        isPlainObject(targetValue) ? targetValue : {},
+        sourceValue,
       )
     } else {
       target[key] = sourceValue
@@ -33,17 +34,18 @@ function mergeDeep(
   return target
 }
 
-const unsafePayload: unknown = JSON.parse(userInput)
-mergeDeep({}, unsafePayload as Record<string, unknown>)
+const parsedPayload: unknown = JSON.parse(userInput)
+
+if (!isPlainObject(parsedPayload)) {
+  throw new Error('expected plain object')
+}
+
+const mergedConfig = mergeDeep({}, parsedPayload)
 
 // ✅ Correct: skip dangerous keys; immutable merge; null-prototype object or Map for dynamic keys
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-export function safeMerge(
+export function mergeDeep(
   target: Record<string, unknown>,
   source: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -54,15 +56,14 @@ export function safeMerge(
       }
 
       const sourceValue = source[key]
+      const targetValue = mergedTarget[key]
 
       if (isPlainObject(sourceValue)) {
-        const nestedTarget = isPlainObject(mergedTarget[key])
-          ? mergedTarget[key]
-          : {}
+        const nestedTarget = isPlainObject(targetValue) ? targetValue : {}
 
         return {
           ...mergedTarget,
-          [key]: safeMerge(nestedTarget, sourceValue),
+          [key]: mergeDeep(nestedTarget, sourceValue),
         }
       }
 
@@ -81,7 +82,7 @@ if (!isPlainObject(parsedPayload)) {
   throw new Error('expected plain object')
 }
 
-const mergedConfig = safeMerge({}, parsedPayload)
+const mergedConfig = mergeDeep({}, parsedPayload)
 const safeObject: Record<string, unknown> = Object.create(null)
 const safeStore = new Map<string, unknown>()
 ```

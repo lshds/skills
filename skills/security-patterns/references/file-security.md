@@ -43,9 +43,10 @@ if (
   throw new PathEscapeError()
 }
 
-const safeFileBytes = await readFile(resolvedPath)
-response.type('application/octet-stream').send(safeFileBytes)
+const fileBytes = await readFile(resolvedPath)
+response.type('application/octet-stream').send(fileBytes)
 ```
+
 ## Uploads
 
 Trusting client `Content-Type` and `originalname` without checks allows oversized or malicious uploads.
@@ -55,7 +56,14 @@ import { randomUUID } from 'node:crypto'
 
 // ❌ Incorrect: no size/type check; trust client Content-Type / filename
 app.post('/api/upload', async (request, response) => {
-  await saveUpload(request.file.path, request.file.originalname)
+  const uploadedFile = request.file
+
+  if (!uploadedFile) {
+    return response.sendStatus(400)
+  }
+
+  await saveUpload(uploadedFile.path, uploadedFile.originalname)
+
   response.sendStatus(201)
 })
 
@@ -66,8 +74,11 @@ const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png'])
 app.post('/api/upload', async (request, response) => {
   const uploadedFile = request.file
 
+  if (!uploadedFile) {
+    return response.sendStatus(400)
+  }
+
   if (
-    !uploadedFile ||
     uploadedFile.size > MAX_UPLOAD_BYTES ||
     !ALLOWED_MIME_TYPES.has(uploadedFile.mimetype)
   ) {
@@ -76,6 +87,7 @@ app.post('/api/upload', async (request, response) => {
 
   const storageId = randomUUID()
   await saveUpload(uploadedFile.path, storageId) // not originalname
+
   response.status(201).json({ id: storageId })
 })
 ```

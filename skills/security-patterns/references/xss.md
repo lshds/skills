@@ -23,9 +23,15 @@ element.innerHTML = location.hash.slice(1)
 // ✅ Correct: JSX text — escaped by default
 <p>{comment.body}</p>
 
-// ✅ Correct: sanitize with tight allowlist only when HTML is required
+// ✅ Correct: sanitize with a tight allowlist only when HTML is required
+const ALLOWED_COMMENT_TAGS = ['p', 'b', 'i', 'em', 'strong', 'a', 'ul', 'ol', 'li']
+const ALLOWED_COMMENT_ATTRIBUTES = ['href']
+
 export function sanitizeHtml(unsafeHtml: string) {
-  return DOMPurify.sanitize(unsafeHtml)
+  return DOMPurify.sanitize(unsafeHtml, {
+    ALLOWED_TAGS: ALLOWED_COMMENT_TAGS,
+    ALLOWED_ATTR: ALLOWED_COMMENT_ATTRIBUTES,
+  })
 }
 
 <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(comment.body) }} />
@@ -36,6 +42,9 @@ element.textContent = location.hash.slice(1)
 
 - Prefer `textContent` and text APIs over `innerHTML`.
 - JSX `{userInput}` is escaped — do not flag by default.
+- Trusted Types, a CSP directive, enforces this sink discipline in the
+  browser: once enabled, `innerHTML` and similar sinks reject raw strings
+  that did not pass through an approved sanitizing policy.
 
 ## URL attributes
 

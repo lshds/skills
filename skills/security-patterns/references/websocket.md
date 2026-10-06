@@ -33,16 +33,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseSocketMessage(
-  rawMessage: unknown,
+  messageText: string,
 ): SocketMessage | undefined {
-  if (typeof rawMessage !== 'string') {
-    return
-  }
-
   let parsedValue: unknown
 
   try {
-    parsedValue = JSON.parse(rawMessage)
+    parsedValue = JSON.parse(messageText)
   } catch {
     return
   }
@@ -88,7 +84,7 @@ const ALLOWED_ORIGINS = new Set([
   'https://app.example.com',
   'https://admin.example.com',
 ])
-const WS_ACTIONS = new Set(['subscribe', 'unsubscribe', 'message'])
+const ALLOWED_SOCKET_ACTIONS = new Set(['subscribe', 'unsubscribe', 'message'])
 
 server.on('connection', (socket, request) => {
   const origin = request.headers.origin
@@ -130,9 +126,8 @@ server.on('connection', (socket, request) => {
 
     if (
       message.type !== 'action' ||
-      !WS_ACTIONS.has(message.action) ||
-      (message.channel !== undefined &&
-        !/^[a-zA-Z0-9_-]+$/.test(message.channel))
+      !ALLOWED_SOCKET_ACTIONS.has(message.action) ||
+      (message.channel && !/^[a-zA-Z0-9_-]+$/.test(message.channel))
     ) {
       socket.send(JSON.stringify({ error: 'Invalid message' }))
       return

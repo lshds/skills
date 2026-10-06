@@ -1,15 +1,115 @@
 # Authentication
 
-Hash credentials with a strong algorithm, pin JWT verification to expected
-algorithms and claims, and keep tokens out of query strings — weak storage and
-token handling are direct account-compromise paths.
+Prefer passkeys, Argon2id password hashes, pinned JWT verification, and
+`__Host-` session cookies over shared secrets, fast hashes, and loose token
+handling — weak credential storage and token transport are direct
+account-compromise paths. When passwords stay, follow NIST SP 800-63B-4
+instead of composition and rotation rules.
+
+## Prefer passkeys
+
+Passwords and one-time codes can be phished: the user types them into a
+look-alike site. A passkey (WebAuthn) signs a server challenge with a key
+bound to the real origin, so a phishing page has nothing to replay and the
+server stores no shared secret worth stealing.
+
+- Offer passkeys as the primary sign-in when the product allows; keep
+  passwords as a fallback, not the default.
+- Verify the challenge, origin, and relying-party ID on the server with the
+  WebAuthn library the repo already uses — never hand-parse authenticator
+  responses.
+- Account recovery must not be weaker than the passkey it replaces (no
+  security questions, no unauthenticated email change).
+- Passkeys also satisfy accessible-authentication requirements: no memory or
+  transcription test.
 
 ## Password storage
 
-Use argon2 or bcrypt with appropriate cost factors. Never store plaintext passwords or reversible encryption.
+A fast or unsalted digest lets an attacker who steals the table test billions
+of guesses per second offline. Argon2id makes every guess cost memory and
+time.
 
-- Hash at registration and password-reset flows before persisting.
-- Compare with a constant-time verify function from the same library.
+```typescript
+import { createHash } from 'node:crypto'
+
+// ❌ Incorrect: fast unsalted digest — offline cracking at GPU speed
+export function hashPasswordInsecurely(password: string) {
+  return createHash('sha256').update(password).digest('hex')
+}
+
+// ✅ Correct (Bun): Argon2id at the OWASP baseline; legacy bcrypt hashes upgrade on login
+const ARGON2ID_OPTIONS = {
+  algorithm: 'argon2id',
+  memoryCost: 19_456,
+  timeCost: 2,
+} as const
+
+export async function hashPassword(password: string) {
+  return Bun.password.hash(password, ARGON2ID_OPTIONS)
+}
+
+export async function verifyPassword(
+  userId: string,
+  password: string,
+  storedHash: string,
+) {
+  const isValid = await Bun.password.verify(password, storedHash)
+
+  if (isValid && !storedHash.startsWith('$argon2id$')) {
+    await updatePasswordHash(userId, await hashPassword(password))
+  }
+
+  return isValid
+}
+```
+
+- Argon2id is the default for new hashes: OWASP baseline 19 MiB memory
+  (`19_456` KiB), 2 iterations, parallelism 1. Tune upward, never below.
+- bcrypt (cost ≥ 10) is only for verifying existing hashes. After a
+  successful login, rehash the submitted password with Argon2id and replace
+  the stored value — the only moment the plaintext is available.
+- On Node, use the Argon2id implementation already installed with the same
+  parameters. If none is available, keep bcrypt and ask before adding a
+  dependency.
+- Hash at registration and password reset before persisting; compare with
+  the library’s verify function (constant time), never `===` on hashes.
+- Never store plaintext passwords or reversible encryption.
+
+## Password policy
+
+NIST SP 800-63B-4 drops composition and rotation rules because they push
+users toward predictable passwords; length and a breached-password check
+stop real attacks.
+
+```html
+<!-- ❌ Incorrect: composition pattern, 16-character cap, paste blocked -->
+<input
+  type="password"
+  pattern="(?=.*\d)(?=.*[A-Z]).{8,16}"
+  onpaste="return false"
+/>
+
+<!-- ✅ Correct: length-based and password-manager friendly -->
+<input
+  type="password"
+  autocomplete="new-password"
+  minlength="15"
+  maxlength="128"
+  required
+/>
+```
+
+- Minimum 15 characters when the password is the only factor, 8 when it is
+  one factor of MFA; accept at least 64.
+- No composition rules (required digits, symbols, or mixed case).
+- No periodic forced rotation — require a change only on evidence of
+  compromise.
+- Reject passwords found in breached or common-password lists.
+- Allow paste and password managers (`autocomplete="current-password"` /
+  `"new-password"`).
+- No security questions for login or recovery.
+- Enforce length and the breached-password check on the server; input
+  attributes only guide the user.
 
 ## JWT verification
 
@@ -118,19 +218,24 @@ Linking.addEventListener('url', ({ url }) => {
 
 ## Session cookies
 
-Session cookies without hardening flags are readable by scripts or sent over plain HTTP.
+Session cookies without hardening flags are readable by scripts, sent over
+plain HTTP, or overwritten by a sibling subdomain.
 
 ```typescript
 // ❌ Incorrect: session cookie without hardening flags
 response.setHeader('Set-Cookie', `session=${sessionId}; Path=/`)
 
-// ✅ Correct: HttpOnly, Secure, SameSite on session cookie
+// ✅ Correct: __Host- prefix + HttpOnly + Secure + SameSite=Lax
 response.setHeader(
   'Set-Cookie',
-  `session=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/`,
+  `__Host-session=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/`,
 )
 ```
 
+- `__Host-` — the browser accepts the cookie only with `Secure`, `Path=/`,
+  and no `Domain`, so a subdomain or plain-HTTP response cannot set or
+  shadow it. Supported by all current browsers.
 - `HttpOnly` — not readable by page scripts.
 - `Secure` — HTTPS only.
-- `SameSite=Lax` or `Strict` — limits cross-site cookie submission.
+- `SameSite=Lax` — the default; `Strict` when cross-site navigation never
+  needs the session.
