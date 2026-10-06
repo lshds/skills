@@ -83,6 +83,35 @@ export async function fetchTenantOrdersAfterCursor(
 - Prefer cursor pagination when offsets get deep or the table is large.
 - Order by a stable unique key so pages do not skip or duplicate rows.
 
+## Scope reads to non-deleted rows
+
+On a table with a soft-delete column, a row that isn't filtered out
+reappears in lists, reports, and joins as if it still exists.
+
+```sql
+-- ❌ Incorrect: forgets to exclude soft-deleted rows
+SELECT id, customer_id, total FROM invoice WHERE customer_id = ?;
+
+-- ✅ Correct: every read path filters on deleted_at
+SELECT id, customer_id, total FROM invoice
+WHERE customer_id = ? AND deleted_at IS NULL;
+
+-- ✅ Correct: filter the joined table in ON so the LEFT JOIN keeps the parent row
+SELECT invoice.id, invoice_line.description
+FROM invoice
+LEFT JOIN invoice_line
+  ON invoice_line.invoice_id = invoice.id
+  AND invoice_line.deleted_at IS NULL
+WHERE invoice.customer_id = ? AND invoice.deleted_at IS NULL;
+```
+
+- Apply `deleted_at IS NULL` to every list, lookup, and join on a
+  soft-deletable table, including ORM relation loads.
+- Centralize the filter in one place (a view, ORM scope, or repository
+  helper) so a new query can't forget it.
+- Admin, restore, and audit paths that must see deleted rows opt out
+  explicitly by name, not by omitting the filter.
+
 ## Eliminate N+1
 
 One query per parent row multiplies latency. Load children in one join or
@@ -145,11 +174,9 @@ export async function fetchTenantUsersWithOrders(tenantId: number) {
   for (const orderRow of orderRows) {
     const existingOrderRows = orderRowsByUserId.get(orderRow.userId) ?? []
 
-    if (existingOrderRows.length >= ORDERS_PER_USER) {
-      continue
+    if (existingOrderRows.length < ORDERS_PER_USER) {
+      orderRowsByUserId.set(orderRow.userId, [...existingOrderRows, orderRow])
     }
-
-    orderRowsByUserId.set(orderRow.userId, [...existingOrderRows, orderRow])
   }
 
   return userRows.map((userRow) => ({

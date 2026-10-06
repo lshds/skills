@@ -6,62 +6,17 @@ brief and the database never ends up half-updated.
 
 ## When to open a transaction
 
-Prefer an explicit transaction when several writes form one business unit of
-work over committing each write alone. Skip the transaction for a single
-independent write — it adds lock time without buying atomicity. Adjust
-balances in SQL so a concurrent transaction cannot clobber a stale in-memory
-value. Lock rows in a stable order (lower id first) so concurrent transfers
-cannot deadlock.
+Two related writes committed separately leave the database half-updated when
+the process dies between them — a debit with no matching credit.
 
-```typescript
-// ❌ Incorrect: two related writes without a transaction
-export async function transferFunds(
-  fromAccountId: number,
-  toAccountId: number,
-  transferAmount: number,
-): Promise<void> {
-  await db
-    .update(account)
-    .set({ balance: sql`${account.balance} - ${transferAmount}` })
-    .where(eq(account.id, fromAccountId))
-  await db
-    .update(account)
-    .set({ balance: sql`${account.balance} + ${transferAmount}` })
-    .where(eq(account.id, toAccountId))
-}
-
-// ✅ Correct: both writes commit or neither does; lock lower id first
-export async function transferFunds(
-  fromAccountId: number,
-  toAccountId: number,
-  transferAmount: number,
-): Promise<void> {
-  const [firstAccountId, secondAccountId] =
-    fromAccountId < toAccountId
-      ? [fromAccountId, toAccountId]
-      : [toAccountId, fromAccountId]
-  const isDebitingFirst = firstAccountId === fromAccountId
-
-  await db.transaction(async (transaction) => {
-    await transaction
-      .update(account)
-      .set({
-        balance: isDebitingFirst
-          ? sql`${account.balance} - ${transferAmount}`
-          : sql`${account.balance} + ${transferAmount}`,
-      })
-      .where(eq(account.id, firstAccountId))
-    await transaction
-      .update(account)
-      .set({
-        balance: isDebitingFirst
-          ? sql`${account.balance} + ${transferAmount}`
-          : sql`${account.balance} - ${transferAmount}`,
-      })
-      .where(eq(account.id, secondAccountId))
-  })
-}
-```
+- Wrap writes that form one business unit of work (debit + credit, order +
+  line items) in one transaction so they commit or roll back together. The
+  `transferFunds` example under lock order shows the shape.
+- Skip the transaction for a single independent write — it adds lock time
+  without buying atomicity.
+- Adjust balances in SQL (`balance - amount`) inside the transaction, not from
+  a value read earlier into memory, so a concurrent transaction cannot clobber
+  it.
 
 ## Keep transactions short
 
@@ -140,7 +95,7 @@ export async function chargeOrder(
   return createdOrder
 }
 
-// ✅ Correct: short tx records intent; a worker performs the HTTP side effect
+// ✅ Correct: short transaction records intent; a worker performs the HTTP side effect
 export async function chargeOrder(
   userId: number,
   chargeAmount: number,
@@ -163,9 +118,10 @@ export async function chargeOrder(
     return createdOrder
   })
 }
-// Worker (separate process): claim pending outbox → HTTP charge → short tx:
-// mark order paid (or failed), insert payment, mark outbox done. Retry-safe;
-// still no HTTP inside a database transaction.
+
+// Worker (separate process): claim pending outbox → HTTP charge → short
+// transaction: mark order paid (or failed), insert payment, mark outbox done.
+// Retry-safe; still no HTTP inside a database transaction.
 ```
 
 - Use an outbox whenever an external side effect must not be lost: in one
@@ -225,6 +181,7 @@ export async function transferFunds(
       .update(account)
       .set({ balance: sql`${account.balance} - ${transferAmount}` })
       .where(eq(account.id, fromAccountId))
+
     await transaction
       .update(account)
       .set({ balance: sql`${account.balance} + ${transferAmount}` })
@@ -232,7 +189,7 @@ export async function transferFunds(
   })
 }
 
-// ✅ Correct: always lock the lower id first
+// ✅ Correct: one transaction; balances adjusted in SQL; lower id locked first
 export async function transferFunds(
   fromAccountId: number,
   toAccountId: number,
@@ -253,6 +210,7 @@ export async function transferFunds(
           : sql`${account.balance} + ${transferAmount}`,
       })
       .where(eq(account.id, firstAccountId))
+
     await transaction
       .update(account)
       .set({
@@ -325,28 +283,7 @@ export async function debitAccount(
 ```
 
 ```typescript
-// ❌ Incorrect: return on failure — Prisma still commits the unit
-export async function debitAccount(
-  fromAccountId: number,
-  transferAmount: number,
-): Promise<void> {
-  await prisma.$transaction(async (transaction) => {
-    const sourceAccount = await transaction.account.findUniqueOrThrow({
-      where: { id: fromAccountId },
-    })
-
-    if (sourceAccount.balance < transferAmount) {
-      return
-    }
-
-    await transaction.account.update({
-      where: { id: fromAccountId },
-      data: { balance: { decrement: transferAmount } },
-    })
-  })
-}
-
-// ✅ Correct: Prisma — interactive transaction
+// ✅ Correct: Prisma — interactive transaction; throw to abort
 export async function debitAccount(
   fromAccountId: number,
   transferAmount: number,
@@ -369,32 +306,7 @@ export async function debitAccount(
 ```
 
 ```typescript
-// ❌ Incorrect: return on failure — Knex still commits the unit
-export async function debitAccount(
-  fromAccountId: number,
-  transferAmount: number,
-): Promise<void> {
-  await knex.transaction(async (transaction) => {
-    const sourceAccount = await transaction('account')
-      .where({ id: fromAccountId })
-      .forUpdate()
-      .first()
-
-    if (!sourceAccount) {
-      return
-    }
-
-    if (sourceAccount.balance < transferAmount) {
-      return
-    }
-
-    await transaction('account')
-      .where({ id: fromAccountId })
-      .decrement('balance', transferAmount)
-  })
-}
-
-// ✅ Correct: Knex — explicit transaction callback
+// ✅ Correct: Knex — transaction callback; forUpdate locks the row; throw to abort
 export async function debitAccount(
   fromAccountId: number,
   transferAmount: number,
@@ -419,3 +331,7 @@ export async function debitAccount(
   })
 }
 ```
+
+- Prisma interactive transactions and Knex transaction callbacks behave like
+  Drizzle: an early `return` commits whatever already ran and reports
+  success to the caller; `throw` rolls the whole unit back.

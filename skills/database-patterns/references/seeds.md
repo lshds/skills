@@ -93,7 +93,7 @@ export async function seedRoles(): Promise<void> {
 INSERT INTO "role" (code, name)
 VALUES ('admin', 'Admin'), ('member', 'Member');
 
--- ✅ Correct: SQL upsert; quote reserved names (`role` is reserved on PostgreSQL)
+-- ✅ Correct: SQL upsert on the stable unique key; a second run updates in place
 INSERT INTO "role" (code, name)
 VALUES ('admin', 'Admin'), ('member', 'Member')
 ON CONFLICT (code) DO UPDATE
@@ -170,7 +170,7 @@ stable foreign keys — not by auto-increment values that differ per database.
 
 ```typescript
 const DEMO_USER_EMAIL = 'demo@example.com'
-const DEMO_ORDER_REF = 'seed-order-demo-1'
+const DEMO_ORDER_REFERENCE = 'seed-order-demo-1'
 
 // ❌ Incorrect: assume serial ids from a previous run
 export async function seedDemoOrder(): Promise<void> {
@@ -192,7 +192,7 @@ export async function seedDemoOrder(): Promise<void> {
     .insert(order)
     .values({
       userId: demoUser.id,
-      externalRef: DEMO_ORDER_REF,
+      externalRef: DEMO_ORDER_REFERENCE,
       status: 'pending',
     })
     .onConflictDoUpdate({
@@ -211,7 +211,8 @@ project’s `db:seed` script. Do not invent a parallel seeder beside it.
 # ❌ Incorrect: invent a parallel seeder beside the repo entrypoint
 # python scripts/custom_seed.py
 
-# ✅ Correct: Prisma — package.json "prisma": { "seed": "tsx prisma/seed.ts" }
+# ✅ Correct: Prisma 7 — migrations.seed in prisma.config.ts
+# (Prisma 6: package.json "prisma": { "seed": "tsx prisma/seed.ts" })
 npx prisma db seed
 
 # ✅ Correct: Drizzle / custom — project script after migrate
