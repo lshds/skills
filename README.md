@@ -75,13 +75,13 @@ mcp/     optional file-lookup (`definition`, `references`)
 | `error-handling-patterns` | Error taxonomy, mapping, and retries |
 | `expo-react-native-patterns` | Expo Router, native UI, and platform-specific code |
 | `folder-structure-blueprint` | Repository layout and package placement |
-| `frontend-patterns` | Component boundaries, state, async UI, client logging, and environment |
+| `frontend-patterns` | Stack-agnostic async UI states, submit UX, web storage, client logging, and client environment |
 | `nextjs-patterns` | Next.js App Router, caching, and server actions |
 | `react-patterns` | React components, hooks, data fetching, and composition |
-| `security-patterns` | Authentication, authorization, injection, and secrets |
+| `security-patterns` | Authentication (passkeys, password policy), authorization, injection, CSRF/CSP, supply chain, and secrets |
 | `styling-patterns` | Design tokens, CSS, Tailwind, and NativeWind |
 | `testing-patterns` | Unit, integration, component, and end-to-end tests |
-| `typescript-standards` | Strict TypeScript typing and conventions |
+| `typescript-standards` | Strict TypeScript typing, conventions, and tsconfig (TS 6 baseline, TS 7 differences) |
 
 ### MCP
 
