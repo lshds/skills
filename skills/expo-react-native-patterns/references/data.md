@@ -12,7 +12,9 @@ success data.
 
 ```tsx
 // ❌ Incorrect: relative URL + ignore HTTP errors
-const data = await fetch('/api/me').then((response) => response.json())
+const currentUser: unknown = await fetch('/api/me').then((response) =>
+  response.json(),
+)
 
 // ✅ Correct: absolute base + status check
 const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/me`)
@@ -21,7 +23,7 @@ if (!response.ok) {
   throw new Error(`HTTP ${response.status}`)
 }
 
-const data = await response.json()
+const currentUser: unknown = await response.json()
 ```
 
 - Prefer `fetch` (or `expo/fetch` for streaming) unless the repo already
@@ -43,6 +45,7 @@ await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
 
 // ✅ Correct: SecureStore + Authorization header
 import * as SecureStore from 'expo-secure-store'
+
 const token = await SecureStore.getItemAsync('auth_token')
 await fetch(url, {
   headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -60,24 +63,26 @@ fetches on unmount when not using a query lib.
 ```tsx
 // ❌ Incorrect: ignore offline; no abort on unmount
 useEffect(() => {
-  fetch(url).then(…).then(setData)
-}, [url])
+  fetch(profileUrl)
+    .then((response) => response.json())
+    .then(setProfile)
+}, [profileUrl])
 
 // ✅ Correct: AbortController cleanup (query libs often cancel for you)
 useEffect(() => {
   const abortController = new AbortController()
 
-  fetch(url, { signal: abortController.signal })
+  fetch(profileUrl, { signal: abortController.signal })
     .then((response) => response.json())
-    .then(setData)
+    .then(setProfile)
     .catch((error) => {
-      if (error.name !== 'AbortError') {
+      if (!abortController.signal.aborted) {
         setError(error)
       }
     })
 
   return () => abortController.abort()
-}, [url])
+}, [profileUrl])
 ```
 
 - React Query: sync NetInfo → `onlineManager` for pause/resume when offline.

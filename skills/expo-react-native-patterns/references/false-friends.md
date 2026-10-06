@@ -10,8 +10,8 @@ Map DOM elements and web events to RN primitives — all text must sit in
 `Text`, and handlers receive values directly.
 
 ```tsx
-// ❌ Incorrect: DOM tags / onClick / e.target.value on native
-<div onClick={handleClick}>
+// ❌ Incorrect: DOM tags / onClick / event.target.value on native
+<div onClick={handleSave}>
   <span>{title}</span>
   <input onChange={(event) => setName(event.target.value)} />
 </div>
@@ -41,7 +41,7 @@ export function SaveRow({ title, name, onNameChange, onSave }: SaveRowProps) {
 | --- | --- |
 | `img` | `expo-image` / `Image` (explicit size or flex parent) |
 | `button` / `a` | `Pressable` + `Link` (`asChild`) |
-| `.map` long lists | `FlatList` / FlashList |
+| `.map` long lists | `FlashList` (`FlatList` when flash-list isn’t installed) |
 
 ## Layout and styling
 
@@ -107,7 +107,14 @@ until it could pass for something the OS shipped.
 <Pressable onLongPress={handleShowMenu}>
   <Text>More</Text>
 </Pressable>
-<FlatList refreshControl={<RefreshControl … />} />
+<FlashList
+  data={feedItems}
+  keyExtractor={(feedItem) => feedItem.id}
+  renderItem={({ item: feedItem }) => <FeedRow feedItem={feedItem} />}
+  refreshControl={
+    <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+  }
+/>
 ```
 
 | Web pattern | Native prefer |

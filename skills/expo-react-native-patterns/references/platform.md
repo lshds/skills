@@ -1,7 +1,8 @@
 # Platform
 
 Prefer small `Platform.select` diffs — split files when native and web diverge
-enough that inline conditionals hurt readability.
+enough that inline conditionals hurt readability. On Android, pad for the
+system bars with safe-area insets rather than fixed numbers.
 
 ## Small differences
 
@@ -10,6 +11,7 @@ Keep platform diffs small and declarative — avoid DOM checks and huge inline O
 ```tsx
 // ❌ Incorrect: DOM APIs / giant inline platform trees on native screens
 const paddingTop = typeof document !== 'undefined' ? 12 : 8
+
 if (Platform.OS === 'ios') {
   /* hundreds of lines */
 } else if (Platform.OS === 'android') {
@@ -76,3 +78,51 @@ import { Platform } from 'react-native'
   server-side / SecureStore.
 - Don’t copy hover-only affordances or multi-column denseness without a mobile
   layout.
+
+## Android draws edge to edge
+
+Android content draws behind the status bar and the navigation bar (always on
+since SDK 54). Code that assumes opaque system bars puts text under the clock
+and buttons under the gesture bar.
+
+```tsx
+// ❌ Incorrect: assumes opaque system bars — a guessed top pad, nothing for the navigation bar
+import { Text, View } from 'react-native'
+
+export function OnboardingScreen() {
+  return (
+    <View style={{ flex: 1, justifyContent: 'space-between', paddingTop: 24 }}>
+      <Text>Welcome</Text>
+      <Text>Swipe to continue</Text>
+    </View>
+  )
+}
+
+// ✅ Correct: pad with the device’s real insets
+import { Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+export function OnboardingScreen() {
+  const insets = useSafeAreaInsets()
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        justifyContent: 'space-between',
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
+      }}
+    >
+      <Text>Welcome</Text>
+      <Text>Swipe to continue</Text>
+    </View>
+  )
+}
+```
+
+- Stack headers and tab bars already pad for the bar they cover; headerless
+  screens, bottom-pinned buttons, and full-screen media need explicit insets.
+- For a whole headerless screen, `SafeAreaView` from
+  `react-native-safe-area-context` (with `edges` limited to the sides you need)
+  works too — never the `react-native` export.

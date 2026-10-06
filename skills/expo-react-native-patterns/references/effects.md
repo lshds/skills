@@ -12,7 +12,7 @@ changes; prefer transforms over animating `width` / `height`.
 
 ```tsx
 // ❌ Incorrect: layout width animation for enters
-<Animated.View style={{ width: open ? 200 : 0 }} />
+<Animated.View style={{ width: isOpen ? 200 : 0 }} />
 
 // ✅ Correct: Reanimated entering + layout + transforms (when Reanimated is in use)
 import Animated, {
@@ -28,6 +28,8 @@ import Animated, {
 />
 ```
 
+- Reanimated 4 requires `react-native-worklets` installed beside it — check
+  both when adding or upgrading Reanimated.
 - Keep most UI motion under ~300ms; prefer springs for drag / settle.
 - Scroll-driven motion: `useScrollViewOffset` + `interpolate(..., 'clamp')`.
 - Keyboard inset motion: `useAnimatedKeyboard` when animating with the keyboard.
@@ -41,17 +43,20 @@ Use the gradient approach the project already uses. `expo-linear-gradient` is
 fine and widely supported — don’t migrate it away by default.
 
 ```tsx
-// ❌ Incorrect: invent a one-off gradient path beside the repo’s helper
+// ❌ Incorrect: one-off LinearGradient while the app renders gradients through a shared Gradient wrapper
 import { LinearGradient } from 'expo-linear-gradient'
-// …while the rest of the app uses a shared Gradient component
+
+<LinearGradient colors={['#000', 'transparent']} style={{ height: 120 }} />
 
 // ✅ Correct: same API / wrapper the project already uses
-<Gradient colors={['#000', 'transparent']} />
+import { Gradient } from '@/components/Gradient'
+
+<Gradient colors={['#000', 'transparent']} style={{ height: 120 }} />
 ```
 
 - `experimental_backgroundImage` CSS gradient strings are **opt-in**: only when
-  New Architecture is on **and** the repo already uses that style prop. Not a
-  default replacement for `expo-linear-gradient`.
+  the repo already uses that experimental style prop. Not a default
+  replacement for `expo-linear-gradient`.
 
 ## Blur and glass
 

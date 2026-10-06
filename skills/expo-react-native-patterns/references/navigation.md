@@ -118,7 +118,7 @@ Prefer Stack `presentation` over custom modal components.
 // ❌ Incorrect: bespoke Modal overlay for a routed flow
 import { Modal } from 'react-native'
 
-<Modal visible={open}>{/* form */}</Modal>
+<Modal visible={isOpen}>{/* form */}</Modal>
 
 // ✅ Correct: Stack modal / form sheet screens
 <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
@@ -133,6 +133,68 @@ import { Modal } from 'react-native'
 />
 ```
 
+## Auth gating
+
+Gate signed-in routes once in the root layout with `Stack.Protected` (SDK 53+).
+A `<Redirect>` check copied into every protected screen gets missed on the next
+new screen, and the protected screen still mounts before redirecting.
+
+```tsx
+// ❌ Incorrect: the same Redirect check copied into every protected screen
+// app/(app)/index.tsx
+import { Redirect } from 'expo-router'
+import { useSession } from '@/context/session'
+import { Home } from '@/screens/Home'
+
+export default function HomeScreen() {
+  const { isSignedIn } = useSession()
+
+  if (!isSignedIn) {
+    return <Redirect href="/sign-in" />
+  }
+
+  return <Home />
+}
+
+// ✅ Correct: app/_layout.tsx guards whole groups in one place
+import { Stack } from 'expo-router'
+import { SessionProvider, useSession } from '@/context/session'
+
+function RootNavigator() {
+  const { isSignedIn } = useSession()
+
+  return (
+    <Stack>
+      <Stack.Protected guard={isSignedIn}>
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+      </Stack.Protected>
+      <Stack.Protected guard={!isSignedIn}>
+        <Stack.Screen name="sign-in" />
+      </Stack.Protected>
+    </Stack>
+  )
+}
+
+export default function RootLayout() {
+  return (
+    <SessionProvider>
+      <RootNavigator />
+    </SessionProvider>
+  )
+}
+```
+
+- Screens inside an unmet guard are unreachable; when the guard flips (sign-in,
+  sign-out), navigation falls back to the first available screen — no manual
+  `router.replace` after the session changes.
+- Tabs gate the same way: wrap `Tabs.Screen` entries in
+  `Tabs.Protected guard={isAdmin}`.
+- `<Redirect>` stays for one-off redirects (an old path forwarding to a new
+  one), not for auth checks repeated per screen.
+- Guards only hide screens on the client — the API still authorizes every
+  request.
+- Pre-53 repos keep their existing redirect pattern until the upgrade.
+
 ## Thin screens
 
 Load data through existing hooks or loaders — not inline fetch plus chrome in
@@ -141,7 +203,8 @@ the route file.
 ```tsx
 // ❌ Incorrect: fat screen — fetch + layout chrome in one file
 export default function ProfileScreen() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<User>()
+
   useEffect(() => {
     fetch('/api/me').then((response) => response.json()).then(setUser)
   }, [])
@@ -180,6 +243,7 @@ router.push({ pathname: '/user', params: { user: JSON.stringify(user) } })
 
 // ✅ Correct: id only; load full model in the screen
 router.push(`/user/${user.id}`)
+
 const { id: userId } = useLocalSearchParams<{ id: string }>()
 ```
 

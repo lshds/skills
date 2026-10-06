@@ -48,13 +48,13 @@ thread. `TextInput` takes `useNativeState`, not a plain string (needs
     <ListItem key={user.id}>{user.name}</ListItem>
   ))}
 </List>
-<TextInput value={text} onChangeText={setText} />
+<TextInput value={inputText} onChangeText={setInputText} />
 
-// ✅ Correct: FlatList for feeds; useNativeState for @expo/ui TextInput
-import { FlatList } from 'react-native'
+// ✅ Correct: virtualized FlashList for feeds; useNativeState for @expo/ui TextInput
+import { FlashList } from '@shopify/flash-list'
 import { Host, TextInput, useNativeState } from '@expo/ui'
 
-<FlatList
+<FlashList
   data={users}
   keyExtractor={(user) => user.id}
   renderItem={({ item: user }) => <UserRow user={user} />}
@@ -101,7 +101,7 @@ import { Pressable } from 'react-native'
 ```
 
 - Compose `LazyColumn` needs `<Host style={{ flex: 1 }}>`; still not for large
-  feeds — use FlatList / FlashList.
+  feeds — use `FlashList` (`FlatList` when flash-list isn’t installed).
 - Android icons: Material Symbols XML under `assets/` via
   `<Icon source={require('./icon.xml')} />`.
 

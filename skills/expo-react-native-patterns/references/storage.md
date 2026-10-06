@@ -10,10 +10,12 @@ Match the use case to one store; never put lifecycle state in persistence.
 ```tsx
 // ❌ Incorrect: auth token in AsyncStorage — not encrypted at rest
 import AsyncStorage from '@react-native-async-storage/async-storage'
+
 await AsyncStorage.setItem('auth_token', token)
 
 // ✅ Correct: SecureStore for secrets; prefs helper for UI flags
 import * as SecureStore from 'expo-secure-store'
+
 await SecureStore.setItemAsync('auth_token', token)
 // theme / flags → repo prefs helper (sqlite localStorage or existing wrapper)
 ```
@@ -35,8 +37,9 @@ await AsyncStorage.setItem('user', JSON.stringify(fullUserFromApi))
 
 // ✅ Correct: small typed keys; ids / drafts / UI prefs only
 import 'expo-sqlite/localStorage/install'
+
 localStorage.setItem('theme', 'dark')
-const theme = localStorage.getItem('theme')
+const theme = localStorage.getItem('theme') ?? 'light'
 ```
 
 - Wrap read/write in `try/catch`.
@@ -52,8 +55,9 @@ localStorage.setItem('auth_token', token)
 
 // ✅ Correct: SecureStore
 import * as SecureStore from 'expo-secure-store'
+
 await SecureStore.setItemAsync('auth_token', token)
-const token = await SecureStore.getItemAsync('auth_token')
+const storedToken = await SecureStore.getItemAsync('auth_token')
 ```
 
 ## Reactive prefs

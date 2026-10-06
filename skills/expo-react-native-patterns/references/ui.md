@@ -19,7 +19,7 @@ import { SafeAreaView, Image } from 'react-native'
 import { Audio } from 'expo-av'
 
 <SafeAreaView>
-  <img src={uri} />
+  <img src={avatarUri} />
 </SafeAreaView>
 
 // ✅ Correct: safe-area-context, expo-image, expo-audio / expo-video
@@ -101,9 +101,9 @@ rewrite a working hex/`PlatformColor` table to chase a newer API.
 <Text style={{ color: '#1a1a1a' }}>Title</Text>
 
 // ✅ Correct: shared semantic tokens from the repo’s theme
-import { colors } from '@/theme/colors'
+import { COLORS } from '@/theme/colors'
 
-<Text style={{ color: colors.label }}>Title</Text>
+<Text style={{ color: COLORS.label }}>Title</Text>
 ```
 
 - If the project already uses `Color` from `expo-router`, keep using it (with a
@@ -112,7 +112,8 @@ import { colors } from '@/theme/colors'
 - Don’t pass dynamic `Color` / `PlatformColor` into Reanimated styles — use
   static colors there.
 - Some third-party props (e.g. `tintColor` on `expo-image`) accept only
-  `string` — cast when needed.
+  `string` — pass a string color token there instead of `PlatformColor`,
+  rather than casting with `as`.
 
 ## Text and controls
 
@@ -128,7 +129,7 @@ restyled web widgets.
 
 // ✅ Correct: selectable errors; Switch for binary settings
 <Text selectable>{errorMessage}</Text>
-<Switch value={isOn} onValueChange={handleValueChange} />
+<Switch value={isOn} onValueChange={setIsOn} />
 ```
 
 - Mode (≤4 short labels) → segmented control; keep labels short and avoid
@@ -138,7 +139,8 @@ restyled web widgets.
 - Modal → Stack `modal` / form sheet.
 - Settings rows → grouped list; `@expo/ui` `FieldGroup` only when the repo
   already uses `@expo/ui`.
-- Long feed → FlatList / FlashList — not `@expo/ui` `List`.
+- Long feed → `FlashList` (`FlatList` when flash-list isn’t installed) — not
+  `@expo/ui` `List`.
 - Counters: `{ fontVariant: 'tabular-nums' }`. Format large counts for display
   (`1.4M`, `38k`) when exact digits aren’t required.
 - `TextInput`: match `keyboardType` / `secureTextEntry` / `returnKeyType` to
@@ -173,13 +175,14 @@ disk first.
 
 ```tsx
 // ❌ Incorrect: pass a data URI / base64 string to the media library
-await MediaLibrary.saveToLibraryAsync(base64DataUri)
+await MediaLibrary.saveToLibraryAsync(base64Photo)
 
 // ✅ Correct: write bytes to a cache file, then save that URI
 import { File, Paths } from 'expo-file-system'
 
 const photoFile = new File(Paths.cache, 'shot.jpg')
-// write bytes, then:
+
+photoFile.write(base64Photo, { encoding: 'base64' })
 await MediaLibrary.saveToLibraryAsync(photoFile.uri)
 ```
 

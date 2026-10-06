@@ -5,8 +5,9 @@ description: >-
   This skill should be used when writing, reviewing, or refactoring Expo or
   React Native code to ensure solid navigation, layout, and native UI
   patterns. Prefer Expo Router and RN primitives over web DOM patterns.
-  Triggers on tasks involving routes, Expo Router, screens, lists, platform
-  splits, storage, device networking, @expo/ui, or web→native false friends.
+  Triggers on tasks involving Expo Router routes and screens, React Native
+  lists, platform splits, on-device storage, device networking, @expo/ui, or
+  web→native false friends.
 ---
 
 # React Native Skills
@@ -27,6 +28,7 @@ CSS-first web styling; web keyboard/ARIA depth.
 
 - Placing routes, screens, or server `+api` files in an Expo app
 - Writing or reviewing Expo Router navigation, tabs, modals, or sheets
+- Gating signed-in routes with `Stack.Protected` / `Tabs.Protected` in a layout
 - Building cross-platform UI (RN primitives, safe area, colors, icons, media)
 - Implementing lists, ios/android/web splits, prefs/SecureStore, or client fetch
 - Porting web idioms or reviewing web→native false friends
@@ -42,28 +44,31 @@ CSS-first web styling; web keyboard/ARIA depth.
 
 ### Match the repo
 
-Detect the project’s stack and stay consistent with it. These patterns are
-defaults for greenfield or when the task explicitly adopts them — not a
-migration checklist. Prefer consistency over “more native / newer Expo.”
-Don’t migrate existing code for a newer pattern. For **new** work, you may
-suggest a modern option (e.g. `@expo/ui`, NativeTabs, Reanimated, system blur)
-— state it as a choice and let the user decide; don’t apply it silently.
+Read installed versions from `package.json` and the lockfile (plus `app.json` /
+`app.config.ts`). Follow the patterns already in the tree; greenfield defaults
+apply only where nothing contradicts them. When code lags behind what the
+installed version supports, finish the task in the existing style, then
+propose the migration once — old → new, why, file count, risk — and wait for a
+yes. Never fold it into the current change. In review, report the gap as a
+finding instead.
 
-Priority when choosing an approach:
+Hard correctness is fixed even in brownfield: routes-only `app/`, no DOM on
+native, absolute `EXPO_PUBLIC_*` fetch bases, secrets in SecureStore,
+serializable route params, virtualized long lists, no `@react-navigation/*`
+imports on SDK 56+. Optional newer APIs (NativeTabs, `@expo/ui` drop-ins,
+sqlite localStorage, SF Symbols, Color API, liquid glass,
+`experimental_backgroundImage`) are a choice to offer for new surfaces — never
+a drive-by.
 
-1. **Repo conventions** — existing folders, helpers, icon set, theme, tabs,
-   storage wrapper, query lib, styling system. Extend them; don’t replace.
-2. **Hard correctness** — routes-only `app/`, no DOM on native, absolute
-   `EXPO_PUBLIC_*` fetch bases, secrets in SecureStore, serializable route
-   params, virtualized long lists, SDK 56+ no `@react-navigation/*` in app
-   code. Fix these even in brownfield.
-3. **Task scope** — change only what the request needs. No drive-by upgrades
-   (NativeTabs, `@expo/ui` drop-ins, sqlite-localStorage, SF Symbols, Color
-   API, liquid glass, `experimental_backgroundImage`).
-4. **Greenfield / new UI** — when creating a new app or new surface, suggest
-   defaults from this skill; user picks before you adopt them.
-5. **Ask before migrating** — if unsure whether a swap is in scope, ask; don’t
-   invent a second parallel stack.
+Version signals:
+
+- `@react-navigation/*` imports in app code → `expo-router` entry points (SDK 56)
+- `expo-av` → `expo-video` / `expo-audio`
+- `SafeAreaView` from `react-native` → `react-native-safe-area-context`
+- per-screen `<Redirect>` auth checks → `Stack.Protected` / `Tabs.Protected` in
+  the layout (SDK 53)
+- FlashList v1 `estimatedItemSize` → FlashList v2 without size estimates (when
+  flash-list 2.x is installed)
 
 ### Project structure
 
@@ -81,8 +86,9 @@ File-based Expo Router. `_layout.tsx` owns stacks/tabs/providers. Nest a Stack
 **inside** each tab when adding tabs. Use `NativeTabs` only if the SDK/repo
 already does (or greenfield + SDK supports them) — don’t swap JS tabs mid-app.
 Prefer Stack `modal` / `formSheet` over custom modals. Navigate with `<Link>` /
-`router.*` — no second navigator. Pass ids, not large objects. See
-[navigation.md](references/navigation.md).
+`router.*` — no second navigator. Pass ids, not large objects. Gate signed-in
+routes once with `Stack.Protected` / `Tabs.Protected` in the layout — not a
+`<Redirect>` in every screen. See [navigation.md](references/navigation.md).
 
 ### Native UI
 
@@ -95,13 +101,17 @@ motion, blur, glass, and gradients: load only when the task needs them. See
 
 ### Lists
 
-Long or dynamic data → FlatList / FlashList with stable `keyExtractor`. Short
-fixed content → `ScrollView` / `View` + `map`. See [lists.md](references/lists.md).
+Long or dynamic data → `FlashList` from `@shopify/flash-list` (v2, no
+`estimatedItemSize`) with a stable `keyExtractor`. `FlatList` when flash-list
+isn’t installed (adding it is a new dependency — ask first) or the list is
+small and simple. Short fixed content → `ScrollView` / `View` + `map`. See
+[lists.md](references/lists.md).
 
 ### Platform
 
 Small diffs → `Platform.select` (or `process.env.EXPO_OS` when the repo uses
-it). Large divergences → `.ios` / `.android` / `.web` file splits. See
+it). Large divergences → `.ios` / `.android` / `.web` file splits. Android
+draws edge to edge — pad headerless screens with safe-area insets. See
 [platform.md](references/platform.md).
 
 ### Storage
@@ -119,7 +129,7 @@ on headers. See [data.md](references/data.md).
 
 ### False friends
 
-Web DOM tags, `onClick` / `e.target.value`, CSS layout, and hover-first UX
+Web DOM tags, `onClick` / `event.target.value`, CSS layout, and hover-first UX
 fail on native — map to RN primitives and thumb-first patterns. See
 [false-friends.md](references/false-friends.md).
 
@@ -127,10 +137,11 @@ fail on native — map to RN primitives and thumb-first patterns. See
 
 | ❌ Incorrect | ✅ Correct |
 | --- | --- |
-| DOM tags, `onClick`, `e.target.value` on native | RN primitives (`View`, `Text`, `Pressable`) |
+| DOM tags, `onClick`, `event.target.value` on native | RN primitives (`View`, `Text`, `Pressable`) |
 | Co-located helpers inside `app/` (phantom routes) | Routes-only `app/`; UI/helpers in role folders |
 | Relative fetch URLs on a native client | Absolute `EXPO_PUBLIC_*` base |
 | Secrets in AsyncStorage or prefs | SecureStore for secrets; prefs helper for flags |
+| `<Redirect>` auth check in every protected screen | `Stack.Protected guard` in the root layout |
 
 ## Practice areas
 
@@ -139,12 +150,12 @@ Read the reference for the task — don’t load every file.
 | Area | Reference |
 | --- | --- |
 | Routes-only `app/` / screens / server | [structure.md](references/structure.md) |
-| Expo Router / Link / tabs / modals / sheets | [navigation.md](references/navigation.md) |
+| Expo Router / Link / tabs / modals / sheets / auth gating / `Stack.Protected` | [navigation.md](references/navigation.md) |
 | RN UI / safe area / colors / icons / media | [ui.md](references/ui.md) |
 | `@expo/ui` Host / universal / drop-ins | [expo-ui.md](references/expo-ui.md) |
-| Motion / blur / glass / gradients | [effects.md](references/effects.md) |
-| Lists / FlatList / keyExtractor | [lists.md](references/lists.md) |
-| Platform splits / ios / android / web | [platform.md](references/platform.md) |
+| Motion / Reanimated / blur / glass / gradients | [effects.md](references/effects.md) |
+| Lists / FlashList v2 / FlatList / keyExtractor | [lists.md](references/lists.md) |
+| Platform splits / ios / android / web / edge-to-edge insets | [platform.md](references/platform.md) |
 | Prefs / SecureStore / SQLite | [storage.md](references/storage.md) |
 | Fetch / env / auth headers | [data.md](references/data.md) |
 | Web idioms that break on native | [false-friends.md](references/false-friends.md) |
