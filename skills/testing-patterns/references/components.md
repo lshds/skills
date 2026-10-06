@@ -1,107 +1,137 @@
 # Components
 
-Prefer tests that exercise user-visible behavior. Mount the component, interact
-like a user, assert what appears — not internals.
+Prefer tests that exercise user-visible behavior over tests that read component
+internals so refactors don’t turn green suites red. Mount the component,
+interact through one `userEvent.setup()` session, and assert what appears.
+Examples use React Testing Library; the same queries and `user` calls apply in
+the other Testing Library flavors (Angular, Vue, Svelte) — only `render` and how
+inputs and outputs are passed differ.
 
 ## Behavior over implementation
 
-Query and assert what the user sees and does. Avoid poking component state,
-instance fields, or CSS class lists as the primary signal.
+Query and assert what the user sees and does. Component state, test ids that
+mirror internal flags, and CSS class lists change on every refactor without any
+change in behavior.
 
 ```tsx
-// .tsx — ❌ Incorrect: asserts implementation details — brittle to refactors
-expect(componentInstance.isSubmitting).toBe(false)
-expect(root.querySelector('.login-form__input--email')).toBeTruthy()
-expect(document.querySelector('[data-testid="isSubmitting"]')).toHaveTextContent(
-  'false',
-)
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { expect, it, vi } from 'vitest'
 
-// .tsx — ✅ Correct: asserts user-visible behavior
-const handleSubmit = vi.fn()
-const email = 'user@example.com'
-const password = 'secret-password'
+import { LoginForm } from './LoginForm'
 
-render(<LoginForm onSubmit={handleSubmit} />)
+// ❌ Incorrect: asserts internal state and styling hooks — brittle to refactors
+it('should not be submitting initially', () => {
+  render(<LoginForm onSubmit={vi.fn()} />)
 
-await userEvent.type(screen.getByLabelText('Email'), email)
-await userEvent.type(screen.getByLabelText('Password'), password)
-await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
-
-expect(handleSubmit).toHaveBeenCalledWith({ email, password })
-```
-
-```typescript
-// .ts — ❌ Incorrect: asserts implementation details — brittle to refactors
-expect(componentInstance.isSubmitting).toBe(false)
-expect(root.querySelector('.login-form__input--email')).toBeTruthy()
-expect(document.querySelector('[data-testid="isSubmitting"]')).toHaveTextContent(
-  'false',
-)
-
-// .ts — ✅ Correct: asserts user-visible behavior
-const handleSubmit = vi.fn()
-const email = 'user@example.com'
-const password = 'secret-password'
-
-await render(LoginFormComponent, {
-  on: { submit: handleSubmit },
+  expect(screen.getByTestId('isSubmitting')).toHaveTextContent('false')
+  expect(screen.getByRole('button', { name: 'Sign in' })).toHaveClass(
+    'login-form__submit--idle',
+  )
 })
 
-await userEvent.type(screen.getByLabelText('Email'), email)
-await userEvent.type(screen.getByLabelText('Password'), password)
-await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+// ✅ Correct: asserts user-visible behavior
+it('should submit the entered credentials', async () => {
+  const user = userEvent.setup()
+  const handleSubmit = vi.fn()
+  const email = 'user@example.com'
+  const password = 'secret-password'
 
-expect(handleSubmit).toHaveBeenCalledWith({ email, password })
+  render(<LoginForm onSubmit={handleSubmit} />)
+
+  await user.type(screen.getByLabelText('Email'), email)
+  await user.type(screen.getByLabelText('Password'), password)
+  await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(handleSubmit).toHaveBeenCalledWith({ email, password })
+})
 ```
 
-## Mount / render
+## One user session per test
 
-Wire the component with the project's `render` (or equivalent). Match the
-component file type; queries and `userEvent` afterward are the same.
+Wire the component with the project’s `render` (or its wrapper), then drive it
+through a single `user` from `userEvent.setup()`, created before rendering.
+`fireEvent` dispatches one synthetic event and skips the focus, keyboard, and
+pointer sequence a real user produces; static `userEvent.click` calls start a
+fresh session each time, so state such as held modifier keys isn’t shared.
 
 ```tsx
-// .tsx — ❌ Incorrect: fireEvent / CSS / native querySelector as the primary path
-fireEvent.change(document.querySelector('.search-input')!, {
-  target: { value: 'notebooks' },
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { expect, it, vi } from 'vitest'
+
+import { SearchBox } from './SearchBox'
+
+// ❌ Incorrect: fireEvent and static userEvent calls — no real input sequence, no shared session
+it('should search for the typed query', async () => {
+  const handleSearch = vi.fn()
+
+  render(<SearchBox onSearch={handleSearch} />)
+
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search' }), {
+    target: { value: 'notebooks' },
+  })
+  await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+  expect(handleSearch).toHaveBeenCalledWith('notebooks')
 })
-fireEvent.click(document.querySelector('.search-btn')!)
 
-// .tsx — ✅ Correct: userEvent through accessible queries
-const handleSearch = vi.fn()
-const searchQuery = 'notebooks'
+// ✅ Correct: one session created before render; every interaction awaited
+it('should search for the typed query', async () => {
+  const user = userEvent.setup()
+  const handleSearch = vi.fn()
+  const searchQuery = 'notebooks'
 
-render(<SearchBox onSearch={handleSearch} />)
+  render(<SearchBox onSearch={handleSearch} />)
 
-await userEvent.type(
-  screen.getByRole('searchbox', { name: 'Search' }),
-  searchQuery,
-)
-await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+  await user.type(screen.getByRole('searchbox', { name: 'Search' }), searchQuery)
+  await user.click(screen.getByRole('button', { name: 'Search' }))
 
-expect(handleSearch).toHaveBeenCalledWith(searchQuery)
+  expect(handleSearch).toHaveBeenCalledWith(searchQuery)
+})
 ```
 
-```typescript
-// .ts — ❌ Incorrect: fireEvent / CSS / native querySelector as the primary path
-fireEvent.change(document.querySelector('.search-input')!, {
-  target: { value: 'notebooks' },
+## Skip manual act
+
+Testing Library already wraps `render` and user-event interactions in `act`, so
+extra wrapping only adds noise. On React 19, `act` comes from `react` —
+`react-dom/test-utils` no longer exports it.
+
+```tsx
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { act } from 'react-dom/test-utils'
+import { expect, it } from 'vitest'
+
+import { Counter } from './Counter'
+
+// ❌ Incorrect: act from react-dom/test-utils (gone in React 19) around calls that are already wrapped
+it('should increase the count', async () => {
+  const user = userEvent.setup()
+
+  render(<Counter />)
+
+  await act(async () => {
+    await user.click(screen.getByRole('button', { name: 'Increase' }))
+  })
+
+  expect(screen.getByRole('status')).toHaveTextContent('1')
 })
-fireEvent.click(document.querySelector('.search-btn')!)
 
-// .ts — ✅ Correct: userEvent through accessible queries
-const handleSearch = vi.fn()
-const searchQuery = 'notebooks'
+// ✅ Correct: Testing Library handles act; assert the visible result
+it('should increase the count', async () => {
+  const user = userEvent.setup()
 
-await render(SearchBoxComponent, { on: { search: handleSearch } })
+  render(<Counter />)
 
-await userEvent.type(
-  screen.getByRole('searchbox', { name: 'Search' }),
-  searchQuery,
-)
-await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+  await user.click(screen.getByRole('button', { name: 'Increase' }))
 
-expect(handleSearch).toHaveBeenCalledWith(searchQuery)
+  expect(screen.getByRole('status')).toHaveTextContent('1')
+})
 ```
+
+- Reach for `act` (imported from `react`) only when the test updates state
+  outside Testing Library — for example, pushing a value into an external store.
 
 ## Avoid snapshot spam
 
@@ -109,19 +139,24 @@ Prefer explicit assertions on the outcome that matters. Broad DOM snapshots
 break on unrelated markup and hide intent.
 
 ```tsx
-// .tsx — ❌ Incorrect: full-tree snapshot as the only assertion
-expect(root).toMatchSnapshot()
+import { render, screen } from '@testing-library/react'
+import { expect, it } from 'vitest'
 
-// .tsx — ✅ Correct: assert the visible result
-expect(screen.getByText('$19.99')).toBeInTheDocument()
-```
+import { PriceTag } from './PriceTag'
 
-```typescript
-// .ts — ❌ Incorrect: full-tree snapshot as the only assertion
-expect(root).toMatchSnapshot()
+// ❌ Incorrect: full-tree snapshot as the only assertion
+it('should render the price', () => {
+  const { container } = render(<PriceTag amountCents={1_999} />)
 
-// .ts — ✅ Correct: assert the visible result
-expect(screen.getByText('$19.99')).toBeInTheDocument()
+  expect(container).toMatchSnapshot()
+})
+
+// ✅ Correct: assert the visible result
+it('should render the price', () => {
+  render(<PriceTag amountCents={1_999} />)
+
+  expect(screen.getByText('$19.99')).toBeInTheDocument()
+})
 ```
 
 ## Props, inputs, and callbacks
@@ -131,45 +166,82 @@ emits (props / inputs / outputs / callbacks). Assert calls and arguments; do
 not re-test parent container logic inside the child test.
 
 ```tsx
-// .tsx — ❌ Incorrect: re-implements parent business rules inside the child test
-const handleChange = vi.fn()
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { expect, it, vi } from 'vitest'
 
-render(<QuantityStepper value={1} onChange={handleChange} />)
+import { QuantityStepper } from './QuantityStepper'
 
-await userEvent.click(screen.getByRole('button', { name: 'Increase' }))
-expect(cartTotalCents).toBe(2_000)
+// ❌ Incorrect: recomputes the parent’s cart total inside the child test
+it('should raise the cart total', async () => {
+  const user = userEvent.setup()
+  const handleChange = vi.fn()
+  const unitPriceCents = 1_000
 
-// .tsx — ✅ Correct: asserts the child notified the parent with the new value
-const handleChange = vi.fn()
+  render(<QuantityStepper value={1} onChange={handleChange} />)
 
-render(<QuantityStepper value={1} onChange={handleChange} />)
+  await user.click(screen.getByRole('button', { name: 'Increase' }))
 
-await userEvent.click(screen.getByRole('button', { name: 'Increase' }))
+  const [nextQuantity] = handleChange.mock.calls[0]
+  expect(nextQuantity * unitPriceCents).toBe(2_000)
+})
 
-expect(handleChange).toHaveBeenCalledWith(2)
+// ✅ Correct: asserts the child notified the parent with the new value
+it('should report the increased quantity', async () => {
+  const user = userEvent.setup()
+  const handleChange = vi.fn()
+
+  render(<QuantityStepper value={1} onChange={handleChange} />)
+
+  await user.click(screen.getByRole('button', { name: 'Increase' }))
+
+  expect(handleChange).toHaveBeenCalledWith(2)
+})
+```
+
+- Angular Testing Library passes the same contract through `render`:
+  `await render(QuantityStepperComponent, { inputs: { value: 1 }, on: { change: handleChange } })`.
+
+## Vitest Browser Mode when the repo runs it
+
+Applies only when `vitest.config.*` already enables `browser`; jsdom or
+happy-dom stays the default when the repo uses them, and adding Browser Mode is
+a new dependency, not a test fix. Since Vitest 4 the provider is a factory from
+its own package, and browser context APIs import from `vitest/browser`.
+
+```typescript
+// ❌ Incorrect: legacy string provider (vitest.config.ts)
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    browser: {
+      enabled: true,
+      provider: 'playwright',
+      instances: [{ browser: 'chromium' }],
+    },
+  },
+})
+
+// ✅ Correct: provider factory from @vitest/browser-playwright
+import { playwright } from '@vitest/browser-playwright'
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    browser: {
+      enabled: true,
+      provider: playwright(),
+      instances: [{ browser: 'chromium' }],
+    },
+  },
+})
 ```
 
 ```typescript
-// .ts — ❌ Incorrect: re-implements parent business rules inside the child test
-const handleChange = vi.fn()
+// ❌ Incorrect: legacy context path in a browser test file
+import { page } from '@vitest/browser/context'
 
-await render(QuantityStepperComponent, {
-  inputs: { value: 1 },
-  on: { change: handleChange },
-})
-
-await userEvent.click(screen.getByRole('button', { name: 'Increase' }))
-expect(cartTotalCents).toBe(2_000)
-
-// .ts — ✅ Correct: asserts the child notified the parent with the new value
-const handleChange = vi.fn()
-
-await render(QuantityStepperComponent, {
-  inputs: { value: 1 },
-  on: { change: handleChange },
-})
-
-await userEvent.click(screen.getByRole('button', { name: 'Increase' }))
-
-expect(handleChange).toHaveBeenCalledWith(2)
+// ✅ Correct: browser context APIs from vitest/browser
+import { page } from 'vitest/browser'
 ```

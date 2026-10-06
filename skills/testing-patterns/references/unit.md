@@ -12,6 +12,7 @@ Run the real function/class you are testing; never replace it with a mock.
 ```typescript
 // ❌ Incorrect: mocks the function under test — asserts nothing useful
 const fetchOrderTotal = vi.fn().mockReturnValue(42)
+
 expect(fetchOrderTotal()).toBe(42)
 
 // ✅ Correct: real unit; stub only the boundary dependency
@@ -84,8 +85,10 @@ One behavior per test. Prefer small fixtures over multi-step setup chains.
 // ❌ Incorrect: one test covers create, update, and delete paths
 it('should manage users', async () => {
   const createdUser = await createUser(validUser)
+
   const updatedUser = await updateUser(createdUser.id, { name: 'Ada' })
   await deleteUser(createdUser.id)
+
   expect(updatedUser.name).toBe('Ada')
 })
 

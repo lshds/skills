@@ -2,14 +2,13 @@
 name: testing-patterns
 description: >-
   Testing guidelines for unit, integration, component, and e2e. This skill
-  should be used when writing, reviewing, or refactoring tests for stable,
-  behavior-focused coverage — including flaky CI, brittle waits, Page Object /
-  Playwright setup, and service/handler/API integration with faked ports or a
-  thin test DB. Prefer the pyramid and public behavior over brittle internals.
-  Triggers on unit test, integration test, handler test, service test, API
-  test, testcontainers, Jest, Vitest, RTL, Testing Library, mock, e2e,
-  Playwright, end-to-end, flaky test, flaky CI, waitForTimeout, Page Object,
-  or storageState.
+  should be used when writing, reviewing, or refactoring tests to ensure
+  stable, behavior-focused coverage — flaky CI, brittle waits, Playwright
+  setup, and service, handler, or API integration with faked ports or a thin
+  test DB. Prefer the pyramid and public behavior over brittle internals.
+  Triggers on unit, integration, handler, or API test, Jest, Vitest, RTL,
+  Testing Library, userEvent, MSW, mock, testcontainers, e2e, Playwright,
+  flaky test, waitForTimeout, Page Object, or storageState.
 ---
 
 # Testing Skills
@@ -44,6 +43,32 @@ design, or application implementation.
 - **Write** (add or fix tests): apply these defaults; no review report unless asked
 - **Review**: named scope only; report concrete misses in this skill’s domain (layer, flake, assertion coupling)
 - Skip findings outside that domain
+
+### Match the repo
+
+Read installed versions from `package.json` and the lockfile (plus
+`vitest.config.*`, `playwright.config.*`, and `jest.config.*`). Follow the
+patterns already in the tree; greenfield defaults apply only where nothing
+contradicts them. When code lags behind what the installed version supports,
+finish the task in the existing style, then propose the migration once — old →
+new, why, file count, risk — and wait for a yes. Never fold it into the current
+change. In review, report the gap as a finding instead.
+
+Keep the repo’s runner, test environment (jsdom, happy-dom, or Browser Mode),
+`render` wrapper, HTTP test client, and fixtures.
+
+Version signals:
+
+- `userEvent.click(button)` → `const user = userEvent.setup(); await user.click(button)`
+  (user-event 14)
+- `act` from `react-dom/test-utils` → `act` from `react` (React 19)
+- `browser.provider: 'playwright'` + `@vitest/browser/context` → `provider: playwright()`
+  from `@vitest/browser-playwright` + `vitest/browser` (Vitest 4)
+- MSW `rest.get` + `res(ctx.json())` → `http.get` + `HttpResponse.json()` (MSW 2)
+- `page.waitForTimeout(5_000)` / `page.$(selector)` → web-first `expect(locator)`
+  assertions + `getByRole` (Playwright)
+
+Switching test frameworks (Jest ↔ Vitest) is never proposed as modernization.
 
 ### Pyramid / triage
 
@@ -93,10 +118,10 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| Unit / pure logic / mocks | [unit.md](references/unit.md) |
-| Integration / handlers / faked ports / test DB | [integration.md](references/integration.md) |
-| Component / Testing Library | [components.md](references/components.md) |
-| Async waits / `findBy*` / flake | [async.md](references/async.md) |
-| E2E / critical journeys | [e2e.md](references/e2e.md) |
-| Selectors / role / label / `data-testid` | [selectors.md](references/selectors.md) |
-| Playwright / Page Object / storageState | [playwright.md](references/playwright.md) |
+| Unit / pure logic / mocks / AAA / naming / teardown | [unit.md](references/unit.md) |
+| Integration / handlers / faked ports / MSW / third-party HTTP / test DB / testcontainers | [integration.md](references/integration.md) |
+| Component / Testing Library / `userEvent.setup()` / `act` / snapshots / Vitest Browser Mode | [components.md](references/components.md) |
+| Async waits / `findBy*` / `waitFor` / fake timers / flake | [async.md](references/async.md) |
+| E2E / critical journeys / isolation / parallel-safe / login once | [e2e.md](references/e2e.md) |
+| Selectors / role / label / `data-testid` / query priority | [selectors.md](references/selectors.md) |
+| Playwright / Page Object / fixtures / storageState / `toPass` / `page.clock` / aria snapshot / CI config | [playwright.md](references/playwright.md) |

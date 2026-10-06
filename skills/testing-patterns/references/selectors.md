@@ -29,7 +29,7 @@ signals assistive tech uses.
 
 ```typescript
 // ❌ Incorrect: class-based query for a labeled button
-screen.getByClassName('primary-cta')
+container.querySelector('.primary-cta')
 
 // ✅ Correct: role + accessible name
 screen.getByRole('button', { name: 'Save changes' })
@@ -53,22 +53,13 @@ page.getByLabel('Email')
 
 Add `data-testid` when the element has no reliable role, label, or unique text
 (canvas, chart, icon-only without a name yet). Do not sprinkle test ids on every
-node.
-
-```tsx
-// .tsx markup — ❌ Incorrect: test id on a clearly labeled control
-<button data-testid="submit-button" type="submit">Submit</button>
-
-// .tsx markup — ✅ Correct: labeled control needs no test id; canvas does
-<button type="submit">Submit</button>
-<canvas data-testid="revenue-chart" aria-label="Revenue chart" />
-```
+node. The same markup rule applies in JSX and in component templates.
 
 ```html
-<!-- .ts component template — ❌ Incorrect: test id on a clearly labeled control -->
+<!-- ❌ Incorrect: test id on a clearly labeled control -->
 <button data-testid="submit-button" type="submit">Submit</button>
 
-<!-- .ts component template — ✅ Correct: labeled control needs no test id; canvas does -->
+<!-- ✅ Correct: labeled control needs no test id; canvas does -->
 <button type="submit">Submit</button>
 <canvas data-testid="revenue-chart" aria-label="Revenue chart"></canvas>
 ```

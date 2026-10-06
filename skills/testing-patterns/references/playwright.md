@@ -1,7 +1,9 @@
 # Playwright
 
 Prefer one structural style — Page Object or fixtures. Wait on UI state with
-auto-waiting locators and `expect`; mock the network when isolation requires it.
+auto-waiting locators and `expect`, control time with `page.clock` instead of
+sleeping, and mock the network when isolation requires it, so specs stay fast
+and stop flaking on timing.
 
 ## One style: Page Object or fixtures
 
@@ -71,10 +73,12 @@ export const test = base.extend<ItemsFixtures>({
 ## Authenticated storageState
 
 Authenticate once in a setup project, persist `storageState`, and reuse it so
-specs start logged in. Keep credentials in env vars — not in the repo.
+specs start logged in. Log in as a seeded, disposable e2e user whose
+credentials come from env vars — never real passwords or production accounts
+in the repo.
 
 ```typescript
-// ❌ Incorrect: full UI login inside every authenticated test
+// ❌ Incorrect: full UI login with hardcoded credentials inside every authenticated test
 test('should open settings', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('Email').fill('user@example.com')
@@ -83,24 +87,47 @@ test('should open settings', async ({ page }) => {
   await page.goto('/settings')
 })
 
-// ✅ Correct: setup writes storageState; dependent projects reuse it
+// ✅ Correct: auth.setup.ts logs in once and writes storageState
+import { test as setup } from '@playwright/test'
+
 const AUTH_STORAGE_STATE_PATH = 'playwright/.auth/user.json'
-const e2eUserEmail = process.env.E2E_USER_EMAIL
-const e2eUserPassword = process.env.E2E_USER_PASSWORD
 
-if (!e2eUserEmail || !e2eUserPassword) {
-  throw new Error('Missing E2E user credentials')
-}
+setup('authenticate', async ({ page }) => {
+  const e2eUserEmail = process.env.E2E_USER_EMAIL
+  const e2eUserPassword = process.env.E2E_USER_PASSWORD
 
-await page.goto('/login')
-await page.getByLabel('Email').fill(e2eUserEmail)
-await page.getByLabel('Password').fill(e2eUserPassword)
-await page.getByRole('button', { name: 'Sign in' }).click()
-await page.context().storageState({ path: AUTH_STORAGE_STATE_PATH })
+  if (!e2eUserEmail || !e2eUserPassword) {
+    throw new Error('Missing E2E user credentials')
+  }
 
-// projects: setup (testMatch auth.setup) → chromium with
-// use: { storageState: AUTH_STORAGE_STATE_PATH }
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(e2eUserEmail)
+  await page.getByLabel('Password').fill(e2eUserPassword)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await page.context().storageState({ path: AUTH_STORAGE_STATE_PATH })
+})
 ```
+
+```typescript
+// ✅ Correct: playwright.config.ts — setup runs first; dependent projects start logged in
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  projects: [
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
+  ],
+})
+```
+
+- Git-ignore `playwright/.auth/` — the file holds live session cookies.
 
 ## Waits on UI state
 
@@ -115,7 +142,101 @@ await page.getByRole('button', { name: 'Confirm' }).click()
 // ✅ Correct: assert readiness, then act
 await expect(page.getByRole('button', { name: 'Confirm' })).toBeEnabled()
 await page.getByRole('button', { name: 'Confirm' }).click()
+
 await expect(page.getByText('Order confirmed')).toBeVisible()
+```
+
+## Poll non-locator conditions with toPass
+
+Locator assertions already retry. For anything else — an API status, a
+downloaded file, a value read through `page.evaluate` — pass the check to
+`expect()` as an async callback and call `.toPass()`, so it retries until it
+holds or the timeout ends, instead of sleeping and reading once.
+
+```typescript
+import { expect, test } from '@playwright/test'
+
+// ❌ Incorrect: sleep, then read once — flaky when the export takes longer
+test('should publish the CSV export', async ({ page, request }) => {
+  await page.goto('/reports')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+  await page.waitForTimeout(3_000)
+
+  const exportResponse = await request.get('/api/exports/latest')
+
+  expect(exportResponse.status()).toBe(200)
+})
+
+// ✅ Correct: retry the whole block until it passes or times out
+test('should publish the CSV export', async ({ page, request }) => {
+  await page.goto('/reports')
+  await page.getByRole('button', { name: 'Export CSV' }).click()
+
+  await expect(async () => {
+    const exportResponse = await request.get('/api/exports/latest')
+
+    expect(exportResponse.status()).toBe(200)
+  }).toPass({ timeout: 10_000 })
+})
+```
+
+## Control time with page.clock
+
+Countdowns, session timeouts, and “today” labels depend on the clock. Waiting
+real time makes specs slow and nondeterministic; install a fake clock before the
+page loads, then move it forward.
+
+```typescript
+import { expect, test } from '@playwright/test'
+
+// ❌ Incorrect: waits a real minute for the session warning
+test('should warn before the session expires', async ({ page }) => {
+  await page.goto('/dashboard')
+  await page.waitForTimeout(60_000)
+
+  await expect(page.getByRole('alert')).toHaveText('Your session expires in 5 minutes')
+})
+
+// ✅ Correct: fake clock installed before load, then fast-forwarded
+test('should warn before the session expires', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-01-01T09:00:00Z') })
+  await page.goto('/dashboard')
+
+  await page.clock.fastForward('01:00')
+
+  await expect(page.getByRole('alert')).toHaveText('Your session expires in 5 minutes')
+})
+```
+
+- For date-dependent rendering with no timers involved, pin the time with
+  `await page.clock.setFixedTime(new Date('2026-01-01T09:00:00Z'))`.
+
+## Structure checks with aria snapshots
+
+When the assertion is the shape of a region — headings, landmarks, the controls
+in a toolbar — compare its accessibility tree with `toMatchAriaSnapshot`. An
+HTML snapshot breaks on every class or wrapper change and still misses a lost
+role or name.
+
+```typescript
+import { expect, test } from '@playwright/test'
+
+// ❌ Incorrect: full HTML snapshot — breaks on markup churn, blind to roles and names
+test('should render the orders page structure', async ({ page }) => {
+  await page.goto('/orders')
+
+  expect(await page.content()).toMatchSnapshot()
+})
+
+// ✅ Correct: aria snapshot of the main region — roles, names, and levels only
+test('should render the orders page structure', async ({ page }) => {
+  await page.goto('/orders')
+
+  await expect(page.getByRole('main')).toMatchAriaSnapshot(`
+    - heading "Orders" [level=1]
+    - button "New order"
+  `)
+})
 ```
 
 ## Network mock and route
@@ -129,6 +250,7 @@ vendors.
 test('should show payment success', async ({ page }) => {
   await page.goto('/checkout')
   await page.getByRole('button', { name: 'Pay' }).click()
+
   await expect(page.getByText('Payment successful')).toBeVisible()
 })
 
@@ -144,6 +266,7 @@ test('should show payment success', async ({ page }) => {
 
   await page.goto('/checkout')
   await page.getByRole('button', { name: 'Pay' }).click()
+
   await expect(page.getByText('Payment successful')).toBeVisible()
 })
 ```
@@ -163,10 +286,14 @@ test('should complete checkout', async ({ page }) => {
   await test.step('Confirm payment', async () => {
     await page.goto('/checkout')
     await page.getByRole('button', { name: 'Pay' }).click()
+
     await expect(page.getByText('Payment successful')).toBeVisible()
   })
 })
 ```
+
+- Label key locators in product words with `locator.describe('Checkout button')`
+  so traces and reports read without decoding selectors.
 
 ## CI config
 
@@ -199,3 +326,10 @@ export default defineConfig({
   },
 })
 ```
+
+- Locally, `npx playwright test --only-changed` runs just the specs affected by
+  uncommitted changes — a fast loop, not a replacement for the full CI run.
+- `instant()` from `@next/playwright` (the journey steps go in its callback)
+  belongs only in Next.js repos that enable Instant Navigations
+  (`cacheComponents: true` + `partialPrefetching: true`); don’t add it
+  elsewhere.

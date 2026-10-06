@@ -9,11 +9,12 @@ Cover critical browser journeys (login, checkout, signup). Leave edge cases and 
 
 ```typescript
 // ❌ Incorrect: e2e enumerates validation edge cases better suited to unit tests
-test('rejects every invalid email shape', async ({ page }) => {
+test('should reject every invalid email shape', async ({ page }) => {
   for (const invalidEmail of invalidEmails) {
     await page.goto('/signup')
     await page.getByLabel('Email').fill(invalidEmail)
     await page.getByRole('button', { name: 'Continue' }).click()
+
     await expect(page.getByRole('alert')).toBeVisible()
   }
 })
@@ -49,6 +50,7 @@ test('should open the created project', async ({ page }) => {
   try {
     await page.goto('/projects')
     await page.getByRole('link', { name: project.name }).click()
+
     await expect(page.getByRole('heading', { name: project.name })).toBeVisible()
   } finally {
     await deleteTestProject(project.id)
@@ -69,37 +71,14 @@ const testUserEmail = 'e2e-user@example.com'
 const testUserEmail = `e2e-user-${crypto.randomUUID()}@example.com`
 ```
 
-## Auth and credentials
+## Log in once, not in every test
 
-Reuse authenticated session state instead of logging in through the UI in every
-test. Seed disposable fixture users; never commit real passwords, tokens, or
-production accounts.
-
-```typescript
-// ❌ Incorrect: production credentials hardcoded; full login in every test
-const adminPassword = 'ProdAdmin!2024'
-
-test('should open settings', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill('user@example.com')
-  await page.getByLabel('Password').fill(adminPassword)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.goto('/settings')
-})
-
-// ✅ Correct: seeded e2e user from env; session reused across authenticated specs
-const e2eUserEmail = process.env.E2E_USER_EMAIL
-const e2eUserPassword = process.env.E2E_USER_PASSWORD
-
-if (!e2eUserEmail || !e2eUserPassword) {
-  throw new Error('Missing E2E user credentials')
-}
-
-const e2eUser = {
-  email: e2eUserEmail,
-  password: e2eUserPassword,
-}
-```
+Logging in through the UI in every test multiplies runtime and makes every spec
+flake on the login page instead of the journey under test. Authenticate once and
+reuse the saved session (Playwright `storageState`, or the runner’s equivalent);
+drive the login form only in the test that covers login itself. Credentials
+belong to seeded, disposable e2e users and come from env vars — never real
+passwords, tokens, or production accounts.
 
 ## What does not belong
 

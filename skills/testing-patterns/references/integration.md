@@ -1,8 +1,9 @@
 # Integration
 
 Prefer real composition of collaborating units — handler + service + ports, or
-a thin real store — exercised below the browser. Mock true externals; never
-mock the subject under test.
+a thin real store — exercised below the browser, over stubbing in-process
+modules so the wiring the suite exists to prove actually runs. Fake only true
+externals: repositories, vendors, third-party HTTP, clocks.
 
 ## Scope
 
@@ -39,11 +40,12 @@ payment vendors, email, third-party HTTP, clocks. Preserve each port’s contrac
 so the fake fails the same way a slow/broken edge would.
 
 ```typescript
-// ❌ Incorrect: mocks the service under test — asserts the mock, not behavior
-const createOrder = vi.fn().mockResolvedValue({ id: 'ord_1' })
-expect(await createOrder(orderInput)).toEqual({ id: 'ord_1' })
+// ❌ Incorrect: stubs an in-process collaborator — the pricing wiring under test never runs
+vi.mock('./order-pricing', () => ({
+  calculateOrderTotalCents: vi.fn().mockReturnValue(1_000),
+}))
 
-// ✅ Correct: real service; fake only the repository / gateway port
+// ✅ Correct: real service and pricing; fake only the repository / gateway port
 const orderInput = { amountCents: 1_000, customerId: 'cus_1' }
 
 const orderRepository = {
@@ -99,8 +101,21 @@ the contract callers depend on: success shape, validation failures, not-found,
 conflict, and authz denials — not every internal branch.
 
 ```typescript
-// ❌ Incorrect: one mega-test that walks create → update → delete → list
-it('should manage orders end to end', async () => { /* … */ })
+// ❌ Incorrect: one mega-test walks create → update → delete — the first failure hides the rest
+it('should manage orders end to end', async () => {
+  const createResponse = await request(app)
+    .post('/orders')
+    .send({ amountCents: 1_000, customerId: 'cus_1' })
+  const updateResponse = await request(app)
+    .patch(`/orders/${createResponse.body.id}`)
+    .send({ amountCents: 2_000 })
+  const deleteResponse = await request(app).delete(
+    `/orders/${createResponse.body.id}`,
+  )
+
+  expect(updateResponse.status).toBe(200)
+  expect(deleteResponse.status).toBe(204)
+})
 
 // ✅ Correct: separate cases; unique data; assert the boundary contract
 it('should return 422 when amountCents is missing', async () => {
@@ -124,8 +139,56 @@ it('should create an order when the body is valid', async () => {
 })
 ```
 
-Match the repo’s HTTP test helper (`supertest`, framework `app.inject`, etc.).
-Don’t introduce a second stack.
+Match the repo’s HTTP test helper (`supertest`, or a framework injector such as
+Fastify’s `app.inject`). Don’t introduce a second stack.
+
+## Third-party HTTP with MSW 2
+
+When the repo uses MSW, intercept third-party HTTP at the network layer instead
+of stubbing the HTTP client module, so request building and response parsing
+still run. Fail on any request no handler covers — a silent passthrough hits
+the live vendor from CI.
+
+```typescript
+// ❌ Incorrect: MSW 1 rest + ctx API, replaced by http + HttpResponse in MSW 2
+import { rest } from 'msw'
+import { setupServer } from 'msw/node'
+
+const server = setupServer(
+  rest.get('https://api.shipping.example/rates', (req, res, ctx) =>
+    res(ctx.json({ rates: [{ carrier: 'ups', amountCents: 1_200 }] })),
+  ),
+)
+
+// ✅ Correct: MSW 2 handlers; unhandled requests error; handlers reset between tests
+import { http, HttpResponse } from 'msw'
+import { setupServer } from 'msw/node'
+import { afterAll, afterEach, beforeAll, expect, it } from 'vitest'
+
+import { quoteShipping } from './quote-shipping'
+
+const server = setupServer(
+  http.get('https://api.shipping.example/rates', () =>
+    HttpResponse.json({ rates: [{ carrier: 'ups', amountCents: 1_200 }] }),
+  ),
+)
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+
+it('should quote the cheapest shipping rate', async () => {
+  const shippingQuote = await quoteShipping({ postalCode: '10115' })
+
+  expect(shippingQuote).toEqual({ carrier: 'ups', amountCents: 1_200 })
+})
+```
+
+- Cover vendor failures per test by passing an override handler to
+  `server.use()`, for example `http.get('https://api.shipping.example/rates', () => HttpResponse.json({ code: 'rate_limited' }, { status: 429 }))`;
+  `resetHandlers()` drops the override before the next test.
+- When the repo has no MSW, fake the vendor gateway port instead of adding a
+  dependency mid-task.
 
 ## Fakes vs testcontainers (store choice)
 
@@ -200,7 +263,9 @@ what you are proving.
 ```typescript
 // ❌ Incorrect: asserts a mocked migrator was “called” — proves nothing about schema
 const applyMigrations = vi.fn()
+
 await applyMigrations()
+
 expect(applyMigrations).toHaveBeenCalled()
 
 // ✅ Correct: apply migration; assert a constraint or column the migration adds
@@ -221,7 +286,7 @@ the public contract.
 
 ```typescript
 // ❌ Incorrect: couples to repository internals
-expect(orderRepository._lastInsertPayload.lineItems[0]._tmp).toBeDefined()
+expect(orderRepository._lastInsertPayload.lineItems[0]._normalizedSku).toBeDefined()
 
 // ✅ Correct: public HTTP / service outcome
 expect(response.status).toBe(201)
