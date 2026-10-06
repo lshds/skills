@@ -10,6 +10,7 @@ Don’t mirror props or filter results in state — derive them during render in
 ```tsx
 // ❌ Incorrect: mirror props / derived values in state — redundant sync
 const [visibleItems, setVisibleItems] = useState(items)
+
 useEffect(() => {
   setVisibleItems(items.filter((item) => item.isActive))
 }, [items])
@@ -45,10 +46,10 @@ When the next value depends on the previous one, use a functional updater to avo
 
 ```tsx
 // ❌ Incorrect: stale closure when next depends on prev
-setItems([...items, item])
+setItems([...items, newItem])
 
 // ✅ Correct: functional update when next depends on prev
-setItems((currentItems) => [...currentItems, item])
+setItems((currentItems) => [...currentItems, newItem])
 ```
 
 ## Context + reducer (shared UI)
@@ -57,8 +58,8 @@ Use when several components share complex client state. Keep server/remote data 
 
 ```tsx
 // ❌ Incorrect: prop-drill shared UI state through unrelated parents
-function App() {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+export function App() {
+  const [selectedId, setSelectedId] = useState<string>()
 
   return (
     <>
@@ -71,7 +72,7 @@ function App() {
 
 // ✅ Correct: Context + reducer for shared client UI
 interface SelectionState {
-  selectedId: string | null
+  selectedId?: string
 }
 
 type SelectionAction =
@@ -91,7 +92,7 @@ function selectionReducer(
     case 'select':
       return { selectedId: action.selectedId }
     case 'clear':
-      return { selectedId: null }
+      return {}
     default: {
       const exhaustiveCheck: never = action
       return exhaustiveCheck
@@ -106,7 +107,7 @@ interface SelectionProviderProps {
 }
 
 export function SelectionProvider({ children }: SelectionProviderProps) {
-  const [state, dispatch] = useReducer(selectionReducer, { selectedId: null })
+  const [state, dispatch] = useReducer(selectionReducer, {})
 
   return (
     <SelectionContext value={{ state, dispatch }}>
@@ -126,6 +127,6 @@ export function useSelection() {
 }
 ```
 
-Prefer the repo’s store (Zustand, etc.) when that is already the shared-state pattern — don’t add Context+reducer beside an existing store in the same feature.
+Prefer the repo’s store (for example Zustand) when that is already the shared-state pattern — don’t add Context+reducer beside an existing store in the same feature.
 
-- Render the context itself as the provider (`<SelectionContext value={…}>`) — `.Provider` is the pre-React 19 form. On React 18, keep `.Provider`.
+- Render the context itself as the provider (`<SelectionContext value={{ state, dispatch }}>`) — `.Provider` is the pre-React 19 form. On React 18, keep `.Provider`.

@@ -30,6 +30,8 @@ An undefined check plus a length comparison says the same thing twice.
 
 ## Keep markup in the component
 
-Hoisting static JSX “for performance” fights the no-pre-optimize default and
-React Compiler. Keep markup next to the component unless the repo already
-extracts shared static nodes.
+React Compiler already caches static JSX, so hoisting it to module scope “for
+performance” buys nothing and moves markup away from the component that
+renders it. Without the compiler it is still a pre-optimization the
+measure-first rule doesn’t allow. Keep markup next to the component unless the
+repo already extracts shared static nodes.

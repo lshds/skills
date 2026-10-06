@@ -1,8 +1,9 @@
 # Re-render
 
-Avoid remounts and redundant effects — derive during render, measure before
-memoizing, and keep side effects in event handlers. Apply the heading that
-matches the symptom — not every section.
+Avoid remounts and redundant effects — derive during render, let React
+Compiler handle memoization (measure before memoizing without it), and keep
+side effects in event handlers. Apply the heading that matches the symptom —
+not every section.
 
 ## Don’t define components inside components
 
@@ -15,7 +16,7 @@ interface UserProfileProps {
   theme: string
 }
 
-function UserProfile({ user, theme }: UserProfileProps) {
+export function UserProfile({ user, theme }: UserProfileProps) {
   const Avatar = () => (
     <img src={user.avatarUrl} className={theme === 'dark' ? 'dark' : 'light'} />
   )
@@ -33,10 +34,68 @@ function Avatar({ src, theme }: AvatarProps) {
   return <img src={src} className={theme === 'dark' ? 'dark' : 'light'} />
 }
 
-function UserProfile({ user, theme }: UserProfileProps) {
+export function UserProfile({ user, theme }: UserProfileProps) {
   return <Avatar src={user.avatarUrl} theme={theme} />
 }
 ```
+
+## Hide with Activity instead of unmounting
+
+Conditional rendering unmounts the hidden panel, so its state — a draft note,
+a scroll position, an expanded row — is gone when the user comes back. On
+React 19.2+, `<Activity>` hides the panel and keeps its state and DOM.
+
+```tsx
+// ❌ Incorrect: switching tabs unmounts NotesPanel — the unsent draft is lost
+import { useState } from 'react'
+
+import { HistoryPanel } from './HistoryPanel'
+import { NotesPanel } from './NotesPanel'
+import { TabBar } from './TabBar'
+
+type TicketTab = 'notes' | 'history'
+
+export function TicketTabs() {
+  const [activeTab, setActiveTab] = useState<TicketTab>('notes')
+
+  return (
+    <>
+      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      {activeTab === 'notes' && <NotesPanel />}
+      {activeTab === 'history' && <HistoryPanel />}
+    </>
+  )
+}
+
+// ✅ Correct: Activity hides the inactive panel — the draft and scroll position survive
+import { Activity, useState } from 'react'
+
+export function TicketTabs() {
+  const [activeTab, setActiveTab] = useState<TicketTab>('notes')
+
+  return (
+    <>
+      <TabBar activeTab={activeTab} onChange={setActiveTab} />
+      <Activity mode={activeTab === 'notes' ? 'visible' : 'hidden'}>
+        <NotesPanel />
+      </Activity>
+      <Activity mode={activeTab === 'history' ? 'visible' : 'hidden'}>
+        <HistoryPanel />
+      </Activity>
+    </>
+  )
+}
+```
+
+- Hidden content keeps its state and DOM, but its Effects are cleaned up while
+  hidden and re-created when it becomes visible again — timers, subscriptions,
+  and media stop while hidden, so every Effect needs a correct cleanup.
+- Updates inside hidden content run at low priority, so a hidden panel doesn’t
+  slow down the visible one.
+- Unmount instead when the panel should reset each time it closes, or when
+  keeping its DOM in memory costs more than rebuilding it.
+- On React older than 19.2, keep conditional rendering and lift the state that
+  must survive (the draft) to the parent.
 
 ## Derive during render — not in effects
 
@@ -57,7 +116,7 @@ const fullName = `${firstName} ${lastName}`
 Don’t sync props → state in an effect to “reset” on identity change. Remount with `key` instead:
 
 ```tsx
-// ❌ Incorrect: reset via effect — loses local state on every identity change poorly
+// ❌ Incorrect: reset via effect — renders once with the stale draft, then resets
 useEffect(() => {
   setComment('')
 }, [userId])
@@ -97,26 +156,28 @@ Depend on primitives or derived booleans so effects don’t re-fire on every obj
 ```tsx
 // ❌ Incorrect: object / continuous number as deps — fires too often
 useEffect(() => {
-  track(user)
+  trackUser(user)
 }, [user])
 
 useEffect(() => {
   if (windowWidth < 768) {
-    setIsMobile(true)
+    collapseSidebar()
   }
 }, [windowWidth])
 
 // ✅ Correct: primitives / derived boolean — effect runs only when meaning changes
 useEffect(() => {
-  track(userId)
+  trackUser(userId)
 }, [userId])
+
+const isMobile = windowWidth < 768
 
 useEffect(() => {
   if (!isMobile) {
     return
   }
 
-  /* ... */
+  collapseSidebar()
 }, [isMobile])
 ```
 
@@ -133,9 +194,11 @@ const isMobile = windowWidth < 768
 const isMobile = useMediaQuery('(max-width: 767px)')
 ```
 
-## Split independent hook work
+## Without React Compiler: split memoized work by dependency
 
-Split memoized work by dependency so unrelated inputs don’t recompute everything together.
+Split hand-written `useMemo` by dependency so unrelated inputs don’t recompute
+everything together. With the compiler, write the steps as plain statements —
+it already tracks each one’s inputs separately.
 
 ```tsx
 // ❌ Incorrect: unrelated work shares deps — one change recomputes all
@@ -196,19 +259,30 @@ Read volatile data at the usage point so the whole component doesn’t re-render
 // ❌ Incorrect: subscribe whole component to search params
 const searchParams = useSearchParams()
 
-return <button onClick={() => share(searchParams.get('id'))}>Share</button>
+const handleShare = () => {
+  const resourceId = searchParams.get('id')
+
+  if (!resourceId) {
+    return
+  }
+
+  shareResource(resourceId)
+}
+
+return <button onClick={handleShare}>Share</button>
 
 // ✅ Correct: read at the usage point — no re-render on unrelated param changes
-return (
-  <button
-    onClick={() => {
-      const resourceId = new URLSearchParams(window.location.search).get('id')
-      share(resourceId)
-    }}
-  >
-    Share
-  </button>
-)
+const handleShare = () => {
+  const resourceId = new URLSearchParams(window.location.search).get('id')
+
+  if (!resourceId) {
+    return
+  }
+
+  shareResource(resourceId)
+}
+
+return <button onClick={handleShare}>Share</button>
 ```
 
 ## Transitions for non-urgent updates
@@ -219,19 +293,19 @@ Mark frequent / expensive updates that must not block input as transitions. Keep
 // ❌ Incorrect: expensive filter blocks typing
 const handleChange = (nextSearchQuery: string) => {
   setSearchQuery(nextSearchQuery)
-  setResults(filterAll(nextSearchQuery))
+  setSearchResults(filterAll(nextSearchQuery))
 }
 
 // ✅ Correct: urgent input + transition for heavy work
 const [isPending, startTransition] = useTransition()
 const [searchQuery, setSearchQuery] = useState('')
-const [results, setResults] = useState<Result[]>([])
+const [searchResults, setSearchResults] = useState<SearchResult[]>([])
 
 const handleChange = (nextSearchQuery: string) => {
   setSearchQuery(nextSearchQuery)
 
   startTransition(() => {
-    setResults(filterAll(nextSearchQuery))
+    setSearchResults(filterAll(nextSearchQuery))
   })
 }
 
@@ -242,7 +316,7 @@ return (
       value={searchQuery}
       onChange={(event) => handleChange(event.target.value)}
     />
-    <ResultsList results={results} />
+    <ResultsList results={searchResults} />
   </>
 )
 ```
@@ -251,39 +325,29 @@ High-frequency listeners (scroll, pointer) that only drive secondary UI: wrap th
 
 ## `useDeferredValue` for expensive derived renders
 
-When a prop / local value drives heavy filtering or visualization, defer the expensive side so the input stays snappy. Memoize against the deferred value; otherwise the work still runs every render.
+When a prop / local value drives heavy filtering or visualization, run the
+expensive side against the deferred value so the input stays snappy. The
+urgent render must be able to skip that work: React Compiler caches it
+automatically; without the compiler, memoize it against the deferred value or
+it still runs on every keystroke.
 
 ```tsx
-// ❌ Incorrect: filter on every keystroke against urgent query
+// ❌ Incorrect: filtering against the urgent query — every keystroke waits for the full filter
+const [searchQuery, setSearchQuery] = useState('')
+const filteredItems = items.filter((item) => fuzzyMatch(item, searchQuery))
+
+// ✅ Correct: filter against the deferred query — the input updates first, results catch up
+import { useDeferredValue, useState } from 'react'
+
 interface SearchProps {
   items: Item[]
 }
 
-function Search({ items }: SearchProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const filteredItems = useMemo(
-    () => items.filter((item) => fuzzyMatch(item, searchQuery)),
-    [items, searchQuery],
-  )
-
-  return (
-    <>
-      <input
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-      />
-      <ResultsList results={filteredItems} />
-    </>
-  )
-}
-
-// ✅ Correct: defer expensive derived work — input stays responsive
-function Search({ items }: SearchProps) {
+export function Search({ items }: SearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const deferredSearchQuery = useDeferredValue(searchQuery)
-  const filteredItems = useMemo(
-    () => items.filter((item) => fuzzyMatch(item, deferredSearchQuery)),
-    [items, deferredSearchQuery],
+  const filteredItems = items.filter((item) =>
+    fuzzyMatch(item, deferredSearchQuery),
   )
   const isStale = searchQuery !== deferredSearchQuery
 
@@ -299,6 +363,12 @@ function Search({ items }: SearchProps) {
     </>
   )
 }
+
+// ✅ Correct (without React Compiler): memoize against the deferred value so the urgent render skips the filter
+const filteredItems = useMemo(
+  () => items.filter((item) => fuzzyMatch(item, deferredSearchQuery)),
+  [items, deferredSearchQuery],
+)
 ```
 
 Prefer the repo’s data-library pending state when it already covers the fetch.

@@ -2,7 +2,8 @@
 
 Prefer controlled inputs (or the repo’s form library), `isPending` on submit,
 and inline field errors from local state. Forms that post to a Server Action
-use `useActionState` on React 19.
+use `useActionState` on React 19, read pending state with `useFormStatus` in a
+child of the `<form>`, and show instant feedback with `useOptimistic`.
 
 ## Controlled submit flow
 
@@ -10,7 +11,7 @@ Match the repo’s form approach. When using controlled local state:
 
 ```tsx
 // ❌ Incorrect: no pending guard / validate only as fire-and-forget
-async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
   event.preventDefault()
   await onSave(values)
 }
@@ -35,7 +36,7 @@ export function RenameForm({ onSave }: RenameFormProps) {
   const [errors, setErrors] = useState<FormErrors>({})
   const [isPending, setIsPending] = useState(false)
 
-  const validate = (): FormErrors => {
+  const validateValues = (): FormErrors => {
     const nextErrors: FormErrors = {}
 
     if (!values.name.trim()) {
@@ -48,7 +49,7 @@ export function RenameForm({ onSave }: RenameFormProps) {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    const nextErrors = validate()
+    const nextErrors = validateValues()
     setErrors(nextErrors)
 
     if (Object.keys(nextErrors).length > 0) {
@@ -111,13 +112,15 @@ export function DisplayNameForm() {
     event.preventDefault()
     setIsPending(true)
 
-    const result = await updateDisplayName(
+    const updateResult = await updateDisplayName(
       { kind: 'idle' },
       new FormData(event.currentTarget),
     )
 
     setIsPending(false)
-    setErrorMessage(result.kind === 'error' ? result.message : undefined)
+    setErrorMessage(
+      updateResult.kind === 'error' ? updateResult.message : undefined,
+    )
   }
 
   return (
@@ -180,7 +183,7 @@ function readDisplayNameFromForm(formData: FormData) {
   return trimmedName
 }
 
-// display-name-form.tsx
+// DisplayNameForm.tsx
 'use client'
 
 import { useActionState } from 'react'
@@ -188,17 +191,22 @@ import { useActionState } from 'react'
 import { updateDisplayName } from './actions'
 
 export function DisplayNameForm() {
-  const [result, formAction, isPending] = useActionState(updateDisplayName, {
-    kind: 'idle',
-  })
+  const [updateResult, formAction, isPending] = useActionState(
+    updateDisplayName,
+    { kind: 'idle' },
+  )
 
   return (
     <form action={formAction}>
       <input
         name="displayName"
-        defaultValue={result.kind === 'error' ? result.submittedName : ''}
+        defaultValue={
+          updateResult.kind === 'error' ? updateResult.submittedName : ''
+        }
       />
-      {result.kind === 'error' ? <p role="alert">{result.message}</p> : null}
+      {updateResult.kind === 'error' ? (
+        <p role="alert">{updateResult.message}</p>
+      ) : null}
       <button type="submit" disabled={isPending}>
         Save
       </button>
@@ -212,16 +220,165 @@ export function DisplayNameForm() {
 - React resets uncontrolled fields after a form action. Return the submitted
   values on a recoverable error and feed them back as `defaultValue` so the
   user’s input survives.
-- A submit button in its own component reads `pending` from `useFormStatus()`
-  (`react-dom`) instead of taking a prop.
 - `useFormState` from `react-dom` is the deprecated name — use `useActionState`
   from `react`.
 - Keep the controlled flow above for saves that never reach a Server Action, and
   on React 18.
 
+## Pending state from `useFormStatus` in a child
+
+`useFormStatus` (`react-dom`) reads the status of the parent `<form>`. Called
+in the component that renders the form, there is no parent form, so `pending`
+stays `false` and the button never disables.
+
+```tsx
+// ❌ Incorrect: useFormStatus in the component that renders the <form> — pending is always false
+'use client'
+
+import { useFormStatus } from 'react-dom'
+
+import { subscribeToNewsletter } from './actions'
+
+export function NewsletterForm() {
+  const { pending: isPending } = useFormStatus()
+
+  return (
+    <form action={subscribeToNewsletter}>
+      <input name="email" type="email" />
+      <button type="submit" disabled={isPending}>
+        Subscribe
+      </button>
+    </form>
+  )
+}
+
+// ✅ Correct: the submit button is its own component rendered inside the <form>
+'use client'
+
+import { useFormStatus } from 'react-dom'
+
+import { subscribeToNewsletter } from './actions'
+
+function SubscribeButton() {
+  const { pending: isPending } = useFormStatus()
+
+  return (
+    <button type="submit" disabled={isPending}>
+      {isPending ? 'Subscribing…' : 'Subscribe'}
+    </button>
+  )
+}
+
+export function NewsletterForm() {
+  return (
+    <form action={subscribeToNewsletter}>
+      <input name="email" type="email" />
+      <SubscribeButton />
+    </form>
+  )
+}
+```
+
+- The child reads the status itself — don’t thread `isPending` down as a prop
+  when the button already sits inside the form.
+
+## Instant feedback with `useOptimistic`
+
+Waiting for the server round trip before showing the result makes a posted
+comment look lost. `useOptimistic` renders the expected result while the
+Action runs and falls back to the real data when it settles.
+
+```tsx
+// ❌ Incorrect: the list renders only `comments` — the new comment appears after the round trip
+const submitComment = async (formData: FormData) => {
+  const body = readCommentBody(formData)
+
+  if (!body) {
+    return
+  }
+
+  await addComment(postId, body)
+}
+
+// ✅ Correct: the comment shows at once, marked as sending, while the Action runs
+'use client'
+
+import { useOptimistic } from 'react'
+
+import { addComment } from './actions'
+
+interface ThreadComment {
+  id: string
+  body: string
+  isSending?: boolean
+}
+
+interface CommentThreadProps {
+  postId: string
+  comments: ThreadComment[]
+}
+
+function readCommentBody(formData: FormData) {
+  const body = formData.get('body')
+
+  if (typeof body !== 'string') {
+    return
+  }
+
+  return body.trim()
+}
+
+export function CommentThread({ postId, comments }: CommentThreadProps) {
+  const [optimisticComments, addOptimisticComment] = useOptimistic(
+    comments,
+    (currentComments: ThreadComment[], newComment: ThreadComment) => [
+      ...currentComments,
+      newComment,
+    ],
+  )
+
+  const submitComment = async (formData: FormData) => {
+    const body = readCommentBody(formData)
+
+    if (!body) {
+      return
+    }
+
+    addOptimisticComment({ id: crypto.randomUUID(), body, isSending: true })
+    await addComment(postId, body)
+  }
+
+  return (
+    <>
+      <ul>
+        {optimisticComments.map((comment) => (
+          <li key={comment.id}>
+            {comment.body}
+            {comment.isSending ? <small> Sending…</small> : null}
+          </li>
+        ))}
+      </ul>
+      <form action={submitComment}>
+        <textarea name="body" />
+        <button type="submit">Post</button>
+      </form>
+    </>
+  )
+}
+```
+
+- Call the optimistic setter inside an Action — a function passed to
+  `<form action>`, or a `startTransition` callback; React warns about
+  optimistic updates outside one.
+- The optimistic value lasts only while the Action is pending. When it settles,
+  React renders `comments` again, so the saved comment must arrive through
+  refreshed data (however the app refreshes server data) or it disappears.
+- If the Action fails, the optimistic entry disappears on its own — show an
+  error so the user knows the comment wasn’t posted.
+
 ## Rules
 
-- Prefer controlled inputs, or the repo’s form library (React Hook Form, Zod, etc.) when present — don’t invent a parallel validation style in one feature.
+- Prefer controlled inputs, or the repo’s form library and its schema validator when present (for example React Hook Form with Zod) — don’t invent a parallel validation style in one feature.
 - Guard double-submit with `isPending` (or equivalent); disable the submitting control while pending.
 - On recoverable save failure, keep `values` and set an error — don’t reset the form unless the flow requires it.
 - Uncontrolled + form library only when that is already the local pattern.

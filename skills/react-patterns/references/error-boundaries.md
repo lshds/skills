@@ -10,7 +10,7 @@ Wrap a feature island with a safe fallback — boundaries catch render/lifecycle
 ```tsx
 // ❌ Incorrect: wrap every tiny leaf / expect to catch async + click errors
 <FeatureErrorBoundary>
-  <button onClick={() => throw new Error('nope')}>Click</button>
+  <button onClick={() => { throw new Error('nope') }}>Click</button>
 </FeatureErrorBoundary>
 
 // ✅ Correct: route / feature island with safe fallback
@@ -33,18 +33,17 @@ export class FeatureErrorBoundary extends React.Component<
     return { error }
   }
 
+  handleRetry = () => {
+    this.setState({ error: null })
+    this.props.onRetry?.()
+  }
+
   render() {
     if (this.state.error) {
       return (
         <div role="alert">
           <p>Something went wrong.</p>
-          <button
-            type="button"
-            onClick={() => {
-              this.setState({ error: null })
-              this.props.onRetry?.()
-            }}
-          >
+          <button type="button" onClick={this.handleRetry}>
             Try again
           </button>
         </div>
@@ -60,7 +59,7 @@ Wrap a feature island at the route or panel level; `onRetry` resets UI and can r
 
 ```tsx
 // ✅ Correct: feature island boundary — onRetry resets UI + reloads data
-<FeatureErrorBoundary onRetry={refetch}>
+<FeatureErrorBoundary onRetry={refetchFeaturePanel}>
   <FeaturePanel />
 </FeatureErrorBoundary>
 ```

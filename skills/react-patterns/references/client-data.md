@@ -1,7 +1,8 @@
 # Client Data
 
 Use the repo’s data library for remote reads. Dedupe in-flight requests and
-share cache across mounts — don’t hand-roll fetch in `useEffect`.
+share cache across mounts — don’t hand-roll fetch in `useEffect`. When the app
+already passes promises into Suspense, read them with `use()`.
 
 ## Deduplicate remote reads
 
@@ -9,8 +10,8 @@ Share cache and in-flight requests across mounts via the repo’s data library i
 
 ```tsx
 // ❌ Incorrect: each mount fetches — no shared cache
-function UserList() {
-  const [users, setUsers] = useState([])
+export function UserList() {
+  const [users, setUsers] = useState<User[]>([])
 
   useEffect(() => {
     fetch('/api/users')
@@ -22,7 +23,7 @@ function UserList() {
 }
 
 // ✅ Correct: shared cache / dedup via repo library
-function UserList() {
+export function UserList() {
   const { data: users } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
@@ -32,47 +33,84 @@ function UserList() {
 }
 ```
 
-Same idea with SWR: `useSWR('/api/users', fetcher)` — one in-flight request shared across instances. Don’t hand-roll cacheable fetch-in-`useEffect` or a parallel `useQuery`.
+Same idea with SWR: `useSWR('/api/users', fetchJson)` — one in-flight request shared across instances. Don’t hand-roll cacheable fetch-in-`useEffect` or a parallel `useQuery`.
 
-## Suspense boundaries
+## Read a passed promise with `use()`
 
-When using Suspense / `use()`, don’t block the whole tree on one fetch — wrap the part that needs data.
+`use()` suspends until a promise resolves, so the promise must already exist
+when the component renders. A promise created during render is a new promise
+on every render — the component suspends again each time and never settles.
+Create it outside the reading component (a Server Component or a cache) and
+pass it down; wrap only the part that reads it in `<Suspense>`.
 
 ```tsx
-// ❌ Incorrect: layout waits on data — shell can’t render until fetch completes
-async function Panel() {
-  const panelContent = await fetchPanelContent()
+// ❌ Incorrect: promise created during render — a new promise each render, so it keeps suspending
+'use client'
+
+import { use } from 'react'
+
+import { fetchOrders } from './orders-api'
+import { OrderRows } from './OrderRows'
+
+interface OrderHistoryProps {
+  customerId: string
+}
+
+export function OrderHistory({ customerId }: OrderHistoryProps) {
+  const orders = use(fetchOrders(customerId))
+
+  return <OrderRows orders={orders} />
+}
+
+// ✅ Correct: the Server Component starts the fetch and passes the promise; the client reads it inside Suspense
+// CustomerOrders.tsx (Server Component)
+import { Suspense } from 'react'
+
+import { fetchOrders } from './orders-api'
+import { OrderHistory } from './OrderHistory'
+import { OrdersSkeleton } from './OrdersSkeleton'
+
+interface CustomerOrdersProps {
+  customerId: string
+}
+
+export function CustomerOrders({ customerId }: CustomerOrdersProps) {
+  const ordersPromise = fetchOrders(customerId)
 
   return (
-    <section>
-      <Header />
-      <DataDisplay panelContent={panelContent} />
-      <Footer />
-    </section>
+    <Suspense fallback={<OrdersSkeleton />}>
+      <OrderHistory ordersPromise={ordersPromise} />
+    </Suspense>
   )
 }
 
-// ✅ Correct: shell renders; data streams inside the boundary
-function Panel() {
-  return (
-    <section>
-      <Header />
-      <Suspense fallback={<Skeleton />}>
-        <DataDisplay />
-      </Suspense>
-      <Footer />
-    </section>
-  )
+// OrderHistory.tsx
+'use client'
+
+import { use } from 'react'
+
+import type { Order } from './orders-api'
+import { OrderRows } from './OrderRows'
+
+interface OrderHistoryProps {
+  ordersPromise: Promise<Order[]>
 }
 
-async function DataDisplay() {
-  const panelContent = await fetchPanelContent()
+export function OrderHistory({ ordersPromise }: OrderHistoryProps) {
+  const orders = use(ordersPromise)
 
-  return <div>{panelContent.body}</div>
+  return <OrderRows orders={orders} />
 }
 ```
 
-Only when the app already uses Suspense/`use` — don’t introduce a parallel loading model beside the repo’s data library.
+- Pass the promise un-awaited — awaiting it in the parent blocks the parent’s
+  whole render instead of only the Suspense boundary.
+- Unlike other hooks, `use()` may be called conditionally (inside an `if`),
+  but still only in a component or hook body.
+- A rejected promise throws to the nearest error boundary — wrap the reader in
+  one, or `.catch` the promise where it’s created to resolve to a fallback.
+- Only when the app already uses Suspense / `use` — don’t introduce a parallel
+  loading model beside the repo’s data library.
 
 ## Global event listeners
 
@@ -80,7 +118,7 @@ Don’t register N window/document listeners for N hook instances. Share one sub
 
 ```tsx
 // ❌ Incorrect: N instances = N listeners — scales poorly
-function useKeyboardShortcut(shortcutKey: string, onShortcut: () => void) {
+export function useKeyboardShortcut(shortcutKey: string, onShortcut: () => void) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === shortcutKey) {
@@ -120,7 +158,7 @@ function releaseListenerIfIdle() {
   isListening = false
 }
 
-function useKeyboardShortcut(shortcutKey: string, onShortcut: () => void) {
+export function useKeyboardShortcut(shortcutKey: string, onShortcut: () => void) {
   useEffect(() => {
     ensureListener()
 

@@ -1,19 +1,19 @@
 # Components
 
-Prefer function components with typed props — one primary component per file, defaults in the signature, `null` for an empty render, and stable list keys keep trees predictable and easy to scan.
+Prefer function components with typed props — one primary component per file, defaults in the signature, `null` for an empty render, and stable list keys keep trees predictable and easy to scan. Apply the heading that matches the task.
 
 ## Declaration
 
 Prefer named function components with an explicit props interface — avoid `React.FC`, classes, and untyped defaults.
 
 ```tsx
-// ❌ Incorrect: class component / React.FC / default export + untyped props
+// ❌ Incorrect: React.FC / default export + untyped props
 export const UserCard: React.FC<UserCardProps> = ({ userId, onSelect }) => {
-  return <button onClick={() => onSelect(userId)}>Select</button>
+  return <button type="button" onClick={() => onSelect(userId)}>Select</button>
 }
 
 export default function UserCard(props) {
-  return <div onClick={props.onSelect}>Select</div>
+  return <button type="button" onClick={() => props.onSelect(props.userId)}>Select</button>
 }
 
 // ✅ Correct: named export function + props interface — intent is explicit
@@ -86,6 +86,56 @@ export function TextField({ label, ref }: TextFieldProps) {
 - Create a DOM ref with `useRef<HTMLInputElement>(null)`, not `undefined` —
   the `ref` prop takes `RefObject<T | null>`, so an `undefined` initial value
   fails to type-check.
+
+## Ref callbacks return their cleanup (React 19)
+
+Handling the `null` call to tear down forces the node into a separate ref so
+the teardown can find it. On React 19, return a cleanup function from the ref
+callback — setup and teardown share one closure.
+
+```tsx
+// ❌ Incorrect: teardown keyed on the null call — the node has to be stashed to remove the listener
+import { useRef } from 'react'
+
+function blockPinchZoom(event: WheelEvent) {
+  if (event.ctrlKey) {
+    event.preventDefault()
+  }
+}
+
+export function ZoomCanvas() {
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
+
+  const attachSurface = (surface: HTMLDivElement | null) => {
+    if (!surface) {
+      surfaceRef.current?.removeEventListener('wheel', blockPinchZoom)
+      surfaceRef.current = null
+      return
+    }
+
+    surface.addEventListener('wheel', blockPinchZoom, { passive: false })
+    surfaceRef.current = surface
+  }
+
+  return <div ref={attachSurface} className="zoom-canvas" />
+}
+
+// ✅ Correct: the ref callback returns its cleanup — no null branch, no stashed node
+function attachZoomSurface(surface: HTMLDivElement) {
+  surface.addEventListener('wheel', blockPinchZoom, { passive: false })
+
+  return () => surface.removeEventListener('wheel', blockPinchZoom)
+}
+
+export function ZoomCanvas() {
+  return <div ref={attachZoomSurface} className="zoom-canvas" />
+}
+```
+
+- A new callback identity runs the cleanup and the setup again on every
+  render — define the callback at module scope when it reads nothing from the
+  component, or let React Compiler keep it stable.
+- On React 18, keep the `null` branch — React 18 ignores a returned function.
 
 ## Optional props
 
@@ -230,6 +280,93 @@ Keys must come from stable identity so reorder and insert don’t scramble state
 ```
 
 Use array index only when the list is static and never reorders.
+
+## Document metadata in the component (React 19)
+
+Writing `document.title` from an Effect leaves the server-rendered page without
+a title and shows the previous one until the Effect runs. On React 19,
+`<title>` and `<meta>` rendered in a component hoist to `<head>`.
+
+```tsx
+// ❌ Incorrect: title set in an Effect — missing from the server render, stale until the Effect runs
+import { useEffect } from 'react'
+
+interface ProductPageProps {
+  product: Product
+}
+
+export function ProductPage({ product }: ProductPageProps) {
+  useEffect(() => {
+    document.title = `${product.name} · Shop`
+  }, [product.name])
+
+  return <h1>{product.name}</h1>
+}
+
+// ✅ Correct: <title> and <meta> rendered with the component hoist to <head>
+export function ProductPage({ product }: ProductPageProps) {
+  return (
+    <>
+      <title>{`${product.name} · Shop`}</title>
+      <meta name="description" content={product.summary} />
+      <h1>{product.name}</h1>
+    </>
+  )
+}
+```
+
+- Only when the framework doesn’t own metadata. If the router or framework
+  has its own metadata API, use that — two sources render duplicate tags.
+- Pass `<title>` one string (a template literal), not text mixed with
+  expressions — React expects a single string child and warns on an array.
+
+## Removed APIs
+
+React 19 removed `propTypes` checks and `defaultProps` on function components
+(both are silently ignored), string refs, and `ReactDOM.render`. Code that
+still uses them loses its defaults and validation or fails at startup.
+
+```tsx
+// ❌ Incorrect: APIs React 19 removed — the default and the prop check are ignored, ReactDOM.render no longer exists
+import PropTypes from 'prop-types'
+import ReactDOM from 'react-dom'
+
+import { App } from './App'
+
+export function Badge({ label, tone }) {
+  return <span data-tone={tone}>{label}</span>
+}
+
+Badge.defaultProps = { tone: 'info' }
+Badge.propTypes = { label: PropTypes.string.isRequired }
+
+ReactDOM.render(<App />, document.getElementById('root'))
+
+// ✅ Correct: TypeScript props + default parameters; createRoot for the entry point
+import { createRoot } from 'react-dom/client'
+
+import { App } from './App'
+
+interface BadgeProps {
+  label: string
+  tone?: 'info' | 'error'
+}
+
+export function Badge({ label, tone = 'info' }: BadgeProps) {
+  return <span data-tone={tone}>{label}</span>
+}
+
+const rootElement = document.getElementById('root')
+
+if (!rootElement) {
+  throw new Error('Missing #root element')
+}
+
+createRoot(rootElement).render(<App />)
+```
+
+- String refs (`ref="searchInput"` read through `this.refs`) are gone — use
+  `useRef` or a ref callback.
 
 ## Blank lines between statements
 

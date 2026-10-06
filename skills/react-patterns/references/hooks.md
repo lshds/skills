@@ -10,20 +10,21 @@ Hooks must run at the top level in the same order every render — never after c
 ```tsx
 // ❌ Incorrect: hooks in conditions / after early return — breaks Rules of Hooks
 interface ProfileProps {
-  user: User | null
+  user?: User
 }
 
-function Profile({ user }: ProfileProps) {
+export function Profile({ user }: ProfileProps) {
   if (!user) {
     return null
   }
 
   const [isOpen, setIsOpen] = useState(false)
+
   return <Panel isOpen={isOpen} />
 }
 
 // ✅ Correct: hooks at top level, above early returns
-function Profile({ user }: ProfileProps) {
+export function Profile({ user }: ProfileProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   if (!user) {
@@ -42,12 +43,13 @@ Extract repeated stateful concerns; keep components thin.
 
 ```tsx
 // ❌ Incorrect: same effect + state copied into every screen
-function SearchScreen() {
+export function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedValue, setDebouncedValue] = useState(searchQuery)
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDebouncedValue(searchQuery), 300)
+
     return () => window.clearTimeout(timeoutId)
   }, [searchQuery])
 
@@ -55,7 +57,7 @@ function SearchScreen() {
 }
 
 // ✅ Correct: hook owns the stateful concern — reusable across screens
-export function useDebouncedValue<T>(value: T, delayMs: number): T {
+export function useDebouncedValue<Value>(value: Value, delayMs: number): Value {
   const [debouncedValue, setDebouncedValue] = useState(value)
 
   useEffect(() => {
@@ -77,12 +79,12 @@ Effects synchronize with external systems (DOM, subscriptions, non-React APIs). 
 ```tsx
 // ❌ Incorrect: missing cleanup / object dep / derive in effect
 useEffect(() => {
-  const intervalId = setInterval(() => sync(user), 1000)
+  const intervalId = setInterval(() => syncUser(user), 1000)
 }, [user])
 
 // ✅ Correct: cleanup + primitive deps — stable subscription per userId
 useEffect(() => {
-  const intervalId = setInterval(() => sync(userId), 1000)
+  const intervalId = setInterval(() => syncUser(userId), 1000)
 
   return () => clearInterval(intervalId)
 }, [userId])

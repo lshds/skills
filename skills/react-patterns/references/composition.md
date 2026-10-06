@@ -10,21 +10,25 @@ Compose with `children` and parts so callers choose structure instead of a boole
 // ❌ Incorrect: boolean prop matrix — every combo lives in one component
 interface CardProps {
   title: string
-  showHeader?: boolean
+  hasHeader?: boolean
   isCompact?: boolean
   isAdmin?: boolean
 }
 
 // ✅ Correct: compose with children / parts — caller chooses structure
-interface CardChildrenProps {
+interface CardProps {
   children: React.ReactNode
 }
 
-export function Card({ children }: CardChildrenProps) {
+export function Card({ children }: CardProps) {
   return <div className="card">{children}</div>
 }
 
-export function CardHeader({ children }: CardChildrenProps) {
+interface CardHeaderProps {
+  children: React.ReactNode
+}
+
+export function CardHeader({ children }: CardHeaderProps) {
   return <header className="card-header">{children}</header>
 }
 ```
@@ -50,12 +54,12 @@ interface TabsContextValue {
 
 const TabsContext = createContext<TabsContextValue | null>(null)
 
-interface TabsRootProps {
+interface TabsProps {
   defaultTab: string
   children: React.ReactNode
 }
 
-export function Tabs({ defaultTab, children }: TabsRootProps) {
+export function Tabs({ defaultTab, children }: TabsProps) {
   const [activeTab, setActiveTab] = useState(defaultTab)
 
   return (
@@ -99,5 +103,5 @@ export function Tab({ tabId, children }: TabProps) {
 }
 ```
 
-Render the context itself as the provider (`<TabsContext value={…}>`) —
+Render the context itself as the provider (`<TabsContext value={{ activeTab, setActiveTab }}>`) —
 `.Provider` is the pre-React 19 form. On React 18, keep `.Provider`.
