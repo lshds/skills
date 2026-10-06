@@ -1,29 +1,9 @@
 # Environment
 
-Prefer a public environment object whose required fields are checked when the
-module loads. Don’t put unchecked env vars in request URLs.
-
-## Names the client already uses
-
-The name of a client-visible variable is whatever the repository already reads. Whether it begins with `API_`, `EXPO_PUBLIC_`, `VITE_`, or another prefix is not the rule.
-
-```typescript
-// ❌ Incorrect: a name the rest of the client does not use
-export async function loadCatalog(): Promise<Catalog> {
-  const response = await fetch(`${process.env.CATALOG_HOST}/catalog`)
-  const catalog: Catalog = await response.json()
-  return catalog
-}
-
-// ✅ Correct: the name the repository already uses
-export async function loadCatalog(): Promise<Catalog> {
-  const response = await fetch(`${process.env.API_URL}/catalog`)
-  const catalog: Catalog = await response.json()
-  return catalog
-}
-```
-
-- A secret that must stay on the server must not be among the values copied into client code.
+Prefer one public config object, checked when the module loads, over raw
+environment reads at call sites so a missing value fails at startup instead of
+landing in a request URL as `"undefined"`. Read every variable through that
+object, under the name the client already uses, from one source.
 
 ## Required public values
 
@@ -33,8 +13,8 @@ An unchecked public variable has type `string | undefined`, so embedding it in a
 // ❌ Incorrect: unchecked public variable embedded in the request URL
 export async function loadCatalog(): Promise<Catalog> {
   const response = await fetch(`${process.env.API_URL}/catalog`)
-  const catalog: Catalog = await response.json()
-  return catalog
+
+  return parseCatalog(await response.json())
 }
 
 // ✅ Correct: checked when the module is first evaluated
@@ -52,14 +32,44 @@ function parsePublicEnvironment(): PublicEnvironment {
   return { apiBaseUrl }
 }
 
-const publicEnvironment = parsePublicEnvironment()
+export const publicEnvironment = parsePublicEnvironment()
 
 export async function loadCatalog(): Promise<Catalog> {
   const response = await fetch(`${publicEnvironment.apiBaseUrl}/catalog`)
-  const catalog: Catalog = await response.json()
-  return catalog
+
+  return parseCatalog(await response.json())
 }
 ```
+
+## Names the client already uses
+
+Client bundles see only the variables the bundler exposes — typically those with its public prefix (`VITE_` through `import.meta.env`, `EXPO_PUBLIC_` through `process.env`) — and anything else reads as `undefined`. Use the name, prefix, and access path the repository already reads; a new spelling for the same setting is a second variable nobody sets.
+
+```typescript
+// ❌ Incorrect: a name the rest of the client does not use
+function parsePublicEnvironment(): PublicEnvironment {
+  const apiBaseUrl = process.env.CATALOG_HOST
+
+  if (!apiBaseUrl) {
+    throw new Error('CATALOG_HOST is required')
+  }
+
+  return { apiBaseUrl }
+}
+
+// ✅ Correct: the name the repository already uses, read inside the checked config
+function parsePublicEnvironment(): PublicEnvironment {
+  const apiBaseUrl = process.env.API_URL
+
+  if (!apiBaseUrl) {
+    throw new Error('API_URL is required')
+  }
+
+  return { apiBaseUrl }
+}
+```
+
+- Never give a server-only secret a public prefix — every value the client bundle reads ships to every user.
 
 ## One source
 
@@ -70,8 +80,9 @@ Reading both `app.config` `extra` and an environment variable gives two sources 
 import Constants from 'expo-constants'
 
 export function readApiBaseUrl(): string {
-  const extraApiUrl = Constants.expoConfig?.extra?.apiUrl
-  if (typeof extraApiUrl === 'string' && extraApiUrl.length > 0) {
+  const extraApiUrl: unknown = Constants.expoConfig?.extra?.apiUrl
+
+  if (typeof extraApiUrl === 'string' && extraApiUrl) {
     return extraApiUrl
   }
 

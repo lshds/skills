@@ -8,8 +8,12 @@ If the app already has a logger, use it — not `console.log` in a click handler
 
 ```tsx
 // ❌ Incorrect: leftover console.log in the handler
-function CheckoutButton({ cartId }: { cartId: string }) {
-  function handleClick() {
+interface CheckoutButtonProps {
+  cartId: string
+}
+
+export function CheckoutButton({ cartId }: CheckoutButtonProps) {
+  const handleClick = () => {
     console.log(`checkout started ${cartId}`)
     startCheckout(cartId)
   }
@@ -22,8 +26,8 @@ function CheckoutButton({ cartId }: { cartId: string }) {
 }
 
 // ✅ Correct: the app’s logger
-function CheckoutButton({ cartId }: { cartId: string }) {
-  function handleClick() {
+export function CheckoutButton({ cartId }: CheckoutButtonProps) {
+  const handleClick = () => {
     logger.info('checkout_started', { cartId })
     startCheckout(cartId)
   }
@@ -60,23 +64,23 @@ export function logCheckoutStarted(cart: Cart): void {
 
 ```typescript
 // ❌ Incorrect: warn for a normal live load
-export function logCatalogLoad(result: CatalogLoadResult): void {
-  if (result.source === 'network') {
-    logger.warn('catalog_loaded', { catalogId: result.catalogId })
+export function logCatalogLoad(catalogLoad: CatalogLoadResult): void {
+  if (catalogLoad.source === 'network') {
+    logger.warn('catalog_loaded', { catalogId: catalogLoad.catalogId })
     return
   }
 
-  logger.info('catalog_stale_cache', { catalogId: result.catalogId })
+  logger.info('catalog_stale_cache', { catalogId: catalogLoad.catalogId })
 }
 
 // ✅ Correct: info on a live load; warn when you showed a stale cache
-export function logCatalogLoad(result: CatalogLoadResult): void {
-  if (result.source === 'cache') {
-    logger.warn('catalog_stale_cache', { catalogId: result.catalogId })
+export function logCatalogLoad(catalogLoad: CatalogLoadResult): void {
+  if (catalogLoad.source === 'cache') {
+    logger.warn('catalog_stale_cache', { catalogId: catalogLoad.catalogId })
     return
   }
 
-  logger.info('catalog_loaded', { catalogId: result.catalogId })
+  logger.info('catalog_loaded', { catalogId: catalogLoad.catalogId })
 }
 ```
 
