@@ -4,10 +4,11 @@ description: >-
   CSS and utility styling guidelines for web and mobile UI. This skill should
   be used when writing, reviewing, or refactoring styles, themes, or branded
   UI to ensure tokens, layout, and look stay modern — not deprecated stacks
-  or generic AI defaults. Prefer native CSS, Tailwind v4, and NativeWind v5
-  CSS-first on greenfield (match existing NativeWind v4). Triggers on CSS,
-  SCSS, Sass, CSS modules, Tailwind, `@theme`, NativeWind, tokens, theme,
-  container queries, className, or motion.
+  or generic AI defaults. Prefer native CSS and CSS-first Tailwind v4 on the
+  web, and stable NativeWind v4 on a Tailwind v3 config on mobile, over legacy
+  or pre-release setups. Triggers on CSS, SCSS, Sass, CSS modules, Tailwind,
+  `@theme`, NativeWind, tokens, theme, dark mode, container queries,
+  className, or motion.
 ---
 
 # Styling Skills
@@ -45,9 +46,40 @@ depth; React Native layout primitives beyond `className`.
 
 ### Match the repo
 
-One styling system per feature; don’t migrate stacks (or NativeWind majors)
-unless asked. Greenfield = CSS-first (Tailwind v4 / NativeWind v5). Reuse the
-repo’s theme tokens when they exist. Stack-specific tooling and examples →
+Read installed versions from `package.json` and the lockfile (plus the CSS
+entry file, `postcss.config.*`, and `tailwind.config.*`). Follow the patterns
+already in the tree; greenfield defaults apply only where nothing contradicts
+them. When code lags behind what the installed version supports, finish the
+task in the existing style, then propose the migration once — old → new, why,
+file count, risk — and wait for a yes. Never fold it into the current change.
+In review, report the gap as a finding instead.
+
+One styling system per feature; switching stacks is a separate, asked-for
+change. Reuse the repo’s theme tokens when they exist. Tailwind signals below
+apply to web apps — inside NativeWind v4, the v3 config is correct.
+
+Version signals:
+
+- `tailwind.config.js` + `@tailwind base; @tailwind components; @tailwind utilities;`
+  in a web app → `@import 'tailwindcss';` + `@theme` (Tailwind v4)
+- `shadow-sm` / `rounded` / `outline-none` / `bg-opacity-50` → `shadow-xs` /
+  `rounded-sm` / `outline-hidden` / `bg-black/50` (Tailwind v4)
+- `darkMode: 'class'` → `@custom-variant dark (&:where(.dark, .dark *));`
+  (Tailwind v4)
+- Sass `@import` + global `darken()` → `@use` / `@forward` + `color.adjust()`
+  from `sass:color` (Dart Sass 1.80+)
+- Duplicated `prefers-color-scheme` token blocks → `light-dark()` (Baseline 2024)
+
+NativeWind v4 → v5 is not proposed while v5 is a release candidate.
+
+### Stack defaults
+
+Web: native CSS, or CSS-first Tailwind v4 (`@import 'tailwindcss'` + `@theme`).
+React Native: NativeWind v4 on a Tailwind CSS v3 config — `tailwind.config.js`
+with `nativewind/preset`, `@tailwind` directives in `global.css`,
+`nativewind/babel`, and `withNativeWind(config, { input })` in Metro. Use
+NativeWind v5 (release candidate) only when the repo already runs it or the
+user accepts an RC, pinned to the exact RC pair. Tooling and examples →
 Practice areas.
 
 ### Design plan (free visual axis)
@@ -119,7 +151,7 @@ deprecated CSS properties and at-rules. Full syntax rules → CSS practice area.
 | --- | --- |
 | Mix StyleSheet + NativeWind / CSS + Tailwind in one feature | One styling system per feature |
 | Hand prefixes, `0px`, `:before`, camelCase classes | Unprefixed modern CSS; `0`, `::before`, kebab-case |
-| Dynamic `className={\`text-${x}\`}` / `@tailwind` / JS theme config / `cssInterop` | Complete class names; CSS-first `@import` + `@theme`; `styled()` |
+| Dynamic `className={\`text-${color}\`}`; `@tailwind` + JS theme config in a web Tailwind v4 app | Complete class names; CSS-first `@import` + `@theme` (NativeWind v4 keeps its v3 config) |
 | Code first on a free visual axis; purple/cream-serif/glow defaults | Two-pass design plan (color, type, layout, signature), then tokenized styles |
 | Always-on decorative motion | Gate with reduced-motion / `motion-safe:` / repo helper |
 
@@ -140,6 +172,6 @@ Read the reference for the task — don’t load every file.
 
 | Area | Reference |
 | --- | --- |
-| CSS / SCSS / Sass | [css-scss-sass.md](references/css-scss-sass.md) |
-| Tailwind | [tailwind.md](references/tailwind.md) |
-| NativeWind | [nativewind.md](references/nativewind.md) |
+| CSS / SCSS / Sass / tokens / `light-dark()` / `color-mix()` / `text-wrap` / `@starting-style` / `@layer` / `@use` | [css-scss-sass.md](references/css-scss-sass.md) |
+| Tailwind v4 / `@theme` / `@custom-variant` dark mode / renamed utilities / `@utility` / `@source` | [tailwind.md](references/tailwind.md) |
+| NativeWind v4 / Tailwind v3 config / Metro / Babel / reduce motion / `cssInterop` / v5 RC | [nativewind.md](references/nativewind.md) |

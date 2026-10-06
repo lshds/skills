@@ -73,6 +73,85 @@ site — never bare `--token` as a value. Prefer `oklch` primitives on greenfiel
 }
 ```
 
+## Scheme tokens use light-dark()
+
+Duplicated `@media (prefers-color-scheme: dark)` token blocks drift — every new
+token is added twice, and a manual theme toggle needs a third copy. Declare
+`color-scheme` once and give each color token both values with `light-dark()`.
+
+```css
+/* ❌ Incorrect: each token declared twice — the dark block drifts out of sync */
+:root {
+  --color-surface: oklch(98% 0.01 280);
+  --color-text: oklch(25% 0.02 280);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: oklch(22% 0.02 280);
+    --color-text: oklch(95% 0.01 280);
+  }
+}
+
+/* ✅ Correct: color-scheme + light-dark() — one declaration per token; a toggle only flips color-scheme */
+:root {
+  color-scheme: light dark;
+  --color-surface: light-dark(oklch(98% 0.01 280), oklch(22% 0.02 280));
+  --color-text: light-dark(oklch(25% 0.02 280), oklch(95% 0.01 280));
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+```
+
+- `light-dark()` resolves colors; values that change per scheme but aren’t
+  colors (shadow offsets, background images) still need a scheme-specific rule.
+- When the repo already toggles a `.dark` class or data attribute, extend that
+  strategy instead of adding a second one.
+
+## Derived states use color-mix()
+
+Hand-picked hover and disabled hex values go stale the moment the brand token
+changes. Derive states from the token with `color-mix()` so one edit updates
+every state.
+
+```css
+/* ❌ Incorrect: hand-picked state colors — stale as soon as --color-brand changes */
+.button {
+  background-color: var(--color-brand);
+}
+
+.button:hover {
+  background-color: #1d4ed8;
+}
+
+.button:disabled {
+  background-color: #93c5fd;
+}
+
+/* ✅ Correct: hover and disabled derived from the token */
+.button {
+  background-color: var(--color-brand);
+}
+
+.button:hover {
+  background-color: color-mix(in oklch, var(--color-brand) 85%, oklch(0% 0 0));
+}
+
+.button:disabled {
+  background-color: color-mix(in oklch, var(--color-brand) 40%, var(--color-surface));
+}
+```
+
+- Mix in `oklch` so lightness steps look even across hues. When several
+  components share a derived state, name it as a semantic token
+  (`--color-brand-hover`) instead of repeating the mix.
+
 ## Layout
 
 Prefer intrinsic flex/grid first, then container queries for components, then
@@ -132,6 +211,49 @@ Intentional hierarchy, not noise. Gate decorative animation with
 @media (prefers-reduced-motion: no-preference) {
   .hero-mark {
     animation: float 4s ease-in-out infinite;
+  }
+}
+```
+
+## Entry animations use @starting-style
+
+A dialog or popover goes from `display: none` to shown in one frame, so a plain
+`transition` never runs and the overlay pops in. `@starting-style` supplies the
+first frame’s values, and `transition-behavior: allow-discrete` keeps `display`
+from flipping before the exit fade ends. Gate it like any decorative motion.
+
+```css
+/* ❌ Incorrect: transition from display: none never runs — the dialog pops in; motion ungated */
+dialog {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+dialog[open] {
+  opacity: 1;
+}
+
+/* ✅ Correct: @starting-style sets the entry frame; allow-discrete animates display; reduced motion skips it */
+dialog,
+[popover] {
+  opacity: 0;
+}
+
+dialog[open],
+[popover]:popover-open {
+  opacity: 1;
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog,
+  [popover] {
+    transition-property: opacity, display;
+    transition-duration: 0.2s;
+    transition-behavior: allow-discrete;
   }
 }
 ```
@@ -234,6 +356,31 @@ label:has(:checked) {
 - Use logical properties (`margin-inline-start`) when the value should flip in RTL.
 - Don’t blindly replace every physical property.
 
+## Balance headings, pretty body copy
+
+Wrapped headings leave a lone word on the last line and paragraphs end in
+orphans; hand-tuned `max-width` or `<br>` fixes break on other copy, fonts, and
+locales. Let the browser choose the line breaks.
+
+```css
+/* ❌ Incorrect: per-heading max-width tuned to dodge a one-word last line */
+.hero-title {
+  max-width: 17ch;
+}
+
+/* ✅ Correct: balance headings, avoid orphans in body copy */
+:where(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+:where(p) {
+  text-wrap: pretty;
+}
+```
+
+- Browsers balance only short blocks of a few lines, so keep `balance` on
+  headings, captions, and labels; `pretty` is the body-copy setting.
+
 ## Syntax
 
 Prefer kebab-case names, single-quoted strings and URLs, unitless zero lengths,
@@ -310,7 +457,7 @@ treats sources as UTF-8. Load color helpers from `sass:color` — no global
   background: darken(tokens.$color-surface, 10%);
 }
 
-/* ✅ Correct: @extend a placeholder; sass:color */
+/* ✅ Correct: @extend a placeholder; color.adjust() from sass:color */
 @use 'sass:color';
 @use 'tokens';
 
@@ -320,7 +467,7 @@ treats sources as UTF-8. Load color helpers from `sass:color` — no global
 
 .card {
   @extend %box;
-  background: color.mix(#000, tokens.$color-surface, 10%);
+  background: color.adjust(tokens.$color-surface, $lightness: -10%);
 }
 ```
 
