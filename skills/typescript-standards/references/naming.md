@@ -29,15 +29,18 @@ Functions are verb-noun; callbacks use `on…` in the parameter, `handle…` for
 ```typescript
 // ❌ Incorrect: noun-only, opaque params, on… as the local handler
 async function user(id: string) { }
-function email(e) { }
-function onUserCreated() {
+function email(e: string) { }
+function onUserCreated(data: string, cb: (data: string) => void) {
   cb(data)
 }
 
 // ✅ Correct: verb-noun; handle… local, on… callback param
 async function fetchUserById(userId: string) { }
 function isValidEmail(email: string): boolean { }
-function handleUserCreated(onUserCreated: (userId: string) => void) {
+function handleUserCreated(
+  userId: string,
+  onUserCreated: (userId: string) => void,
+) {
   onUserCreated(userId)
 }
 ```

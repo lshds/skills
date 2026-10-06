@@ -31,6 +31,7 @@ export async function GET() {
   const session = await auth()
   const config = await fetchConfig()
   const resource = await fetchResource(session.user.id)
+
   return Response.json({ resource, config })
 }
 
@@ -74,25 +75,31 @@ Await only on the code path that uses the result — don't block branches that e
 
 ```typescript
 // ❌ Incorrect: blocks both branches — fetch runs even when skipping
-export async function handleRequest(userId: string, skipProcessing: boolean) {
-  const userData = await fetchUserData(userId)
+export async function handleRequest(
+  userId: string,
+  shouldSkipProcessing: boolean,
+) {
+  const userProfile = await fetchUserProfile(userId)
 
-  if (skipProcessing) {
-    return { skipped: true }
+  if (shouldSkipProcessing) {
+    return { isSkipped: true }
   }
 
-  return processUserData(userData)
+  return processUserProfile(userProfile)
 }
 
 // ✅ Correct: await only on the path that uses the result
-export async function handleRequest(userId: string, skipProcessing: boolean) {
-  if (skipProcessing) {
-    return { skipped: true }
+export async function handleRequest(
+  userId: string,
+  shouldSkipProcessing: boolean,
+) {
+  if (shouldSkipProcessing) {
+    return { isSkipped: true }
   }
 
-  const userData = await fetchUserData(userId)
+  const userProfile = await fetchUserProfile(userId)
 
-  return processUserData(userData)
+  return processUserProfile(userProfile)
 }
 ```
 

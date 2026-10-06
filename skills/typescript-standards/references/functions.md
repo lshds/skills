@@ -38,6 +38,7 @@ function notifyUser(user: User) {
   function formatSubject() {
     return `Welcome ${user.email}`
   }
+
   sendEmail({ to: user.email, subject: formatSubject() })
 }
 

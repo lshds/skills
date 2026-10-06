@@ -1,6 +1,6 @@
 # Typing
 
-No `any`. Prefer `unknown` + guards, `as const`, `satisfies`, and discriminated unions.
+No `any`. Prefer `unknown` + guards, `as const`, `satisfies`, `NoInfer`, and discriminated unions.
 
 ## Unknown + type guard (no `any`)
 
@@ -52,7 +52,9 @@ type FetchUserResult = User | undefined
 
 ## `as const` — derive types; no `enum`
 
-Derive unions from `as const` objects — avoid `enum` for string unions.
+Derive unions from `as const` objects — avoid `enum` for string unions. An
+`enum` also emits runtime code, so `erasableSyntaxOnly` rejects it, while an
+`as const` object is plain JavaScript that type stripping leaves intact.
 
 ```typescript
 // ❌ Incorrect: enum — prefer `as const` object + derived union
@@ -77,16 +79,44 @@ type Status = (typeof STATUSES)[keyof typeof STATUSES]
 
 ```typescript
 // ❌ Incorrect: annotation widens keys/paths
-const routesWidened: Record<string, { path: string; auth: boolean }> = {
-  home: { path: '/', auth: false },
-  admin: { path: '/admin', auth: true },
+const routes: Record<string, { path: string; isAuthRequired: boolean }> = {
+  home: { path: '/', isAuthRequired: false },
+  admin: { path: '/admin', isAuthRequired: true },
 }
 
 // ✅ Correct: keeps literals while checking shape
 const routes = {
-  home: { path: '/', auth: false },
-  admin: { path: '/admin', auth: true },
-} as const satisfies Record<string, { path: string; auth: boolean }>
+  home: { path: '/', isAuthRequired: false },
+  admin: { path: '/admin', isAuthRequired: true },
+} as const satisfies Record<string, { path: string; isAuthRequired: boolean }>
+```
+
+## `NoInfer<T>` on fallback parameters
+
+When a fallback, default, or initial value shares a type parameter with the real input, TypeScript infers from both — a typo in the fallback widens the type instead of failing. `NoInfer<T>` checks the argument against `T` without letting it add candidates.
+
+```typescript
+// ❌ Incorrect: the fallback joins inference — 'primray' widens Variant and compiles
+function pickVariant<Variant extends string>(
+  variants: readonly Variant[],
+  requestedVariant: string,
+  fallback: Variant,
+): Variant {
+  return variants.find((variant) => variant === requestedVariant) ?? fallback
+}
+
+const buttonVariant = pickVariant(['primary', 'secondary'], requestedVariant, 'primray')
+
+// ✅ Correct: NoInfer keeps the fallback out of inference — 'primray' is rejected
+function pickVariant<Variant extends string>(
+  variants: readonly Variant[],
+  requestedVariant: string,
+  fallback: NoInfer<Variant>,
+): Variant {
+  return variants.find((variant) => variant === requestedVariant) ?? fallback
+}
+
+const buttonVariant = pickVariant(['primary', 'secondary'], requestedVariant, 'primary')
 ```
 
 ## Discriminated unions
@@ -95,14 +125,18 @@ A `kind` discriminant plus exhaustive `switch` beats optional-field soup.
 
 ```typescript
 // ❌ Incorrect: optional-field soup — invalid states compile
-type ResultSoup = { ok?: boolean; value?: string; message?: string }
+interface LabelResult {
+  isOk?: boolean
+  value?: string
+  message?: string
+}
 
 // ✅ Correct: kind discriminant + exhaustive switch
 type LabelResult =
   | { kind: 'ok'; value: string }
   | { kind: 'error'; message: string }
 
-export function labelFor(labelResult: LabelResult): string {
+export function getLabel(labelResult: LabelResult): string {
   switch (labelResult.kind) {
     case 'ok':
       return labelResult.value

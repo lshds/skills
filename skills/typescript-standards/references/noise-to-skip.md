@@ -11,6 +11,7 @@ Redundant type annotations and `else` after `return` add noise without improving
 ```typescript
 // ❌ Incorrect: redundant annotation; else after return
 const title: string = 'Dashboard'
+
 if (!user) {
   return
 } else {

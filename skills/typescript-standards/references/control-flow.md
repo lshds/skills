@@ -11,25 +11,28 @@ Guard clauses flatten nested happy paths and make failure cases obvious at the t
 
 ```typescript
 // ❌ Incorrect: nested happy path — harder to follow exit points
-export function parseInput(rawInput?: string | null): string | undefined {
+export function parseInput(rawInput?: string): string | undefined {
   if (rawInput) {
     if (rawInput.startsWith('prefix:')) {
       const parsedValue = rawInput.slice('prefix:'.length).trim()
+
       if (parsedValue.length > 0) {
         return parsedValue
       }
     }
   }
+
   return
 }
 
-// ✅ Correct: guard first; `?.` covers both null and undefined
-export function parseInput(rawInput?: string | null): string | undefined {
+// ✅ Correct: guard first; `?.` covers a missing input in the same check
+export function parseInput(rawInput?: string): string | undefined {
   if (!rawInput?.startsWith('prefix:')) {
     return
   }
 
   const parsedValue = rawInput.slice('prefix:'.length).trim()
+
   return parsedValue.length > 0 ? parsedValue : undefined
 }
 ```
@@ -39,14 +42,14 @@ fails `noImplicitReturns` (TS7030).
 
 ```typescript
 // ❌ Incorrect: final return dropped — TS7030 under noImplicitReturns
-export function labelForStatus(status: Status): string | undefined {
+export function getStatusLabel(status: Status): string | undefined {
   if (status === 'ready') {
     return 'Ready'
   }
 }
 
 // ✅ Correct: final exit stays as a bare return
-export function labelForStatus(status: Status): string | undefined {
+export function getStatusLabel(status: Status): string | undefined {
   if (status === 'ready') {
     return 'Ready'
   }
@@ -107,7 +110,7 @@ if (
   current === undefined ||
   Number.isNaN(Date.parse(current.currentTime))
 ) {
-  return undefined
+  return
 }
 
 // ✅ Correct: truthiness for objects/arrays, one guard per concern
@@ -218,37 +221,37 @@ return {
 ```typescript
 // ❌ Incorrect: continue skips the rest of the iteration — the work sits after an implicit jump
 for (const hour of hours) {
-  const level = levelForHour(hour)
+  const level = getLevelForHour(hour)
 
   if (!level) {
     continue
   }
 
-  peak = strongerLevel(peak, level)
+  peak = pickStrongerLevel(peak, level)
 }
 
 // ✅ Correct: one-step body sits in the matching `if`
 for (const hour of hours) {
-  const level = levelForHour(hour)
+  const level = getLevelForHour(hour)
 
   if (level) {
-    peak = strongerLevel(peak, level)
+    peak = pickStrongerLevel(peak, level)
   }
 }
 
 // ✅ Correct: multi-step body uses early `return`
-function nextPeak(peak: Level | undefined, hour: Hour): Level | undefined {
-  const level = levelForHour(hour)
+function getNextPeak(peak: Level | undefined, hour: Hour): Level | undefined {
+  const level = getLevelForHour(hour)
 
   if (!level) {
     return peak
   }
 
-  return strongerLevel(peak, level)
+  return pickStrongerLevel(peak, level)
 }
 
 for (const hour of hours) {
-  peak = nextPeak(peak, hour)
+  peak = getNextPeak(peak, hour)
 }
 ```
 

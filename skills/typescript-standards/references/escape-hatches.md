@@ -5,14 +5,14 @@ at the boundary.
 
 ## Narrow or parse
 
-Prefer `@ts-expect-error` with a reason if an ignore is unavoidable. Never `as` across untrusted/`unknown` data — including `JSON.parse` results, network payloads, and web storage.
+Suppression comments need the user's OK first. When allowed, use `@ts-expect-error` with a reason — it fails once the error is gone, so stale suppressions surface — and never `@ts-ignore`. Never `as` across untrusted/`unknown` data — including `JSON.parse` results, network payloads, and web storage.
 
 ```typescript
 // ❌ Incorrect: silence the checker — cast, non-null assertion, @ts-ignore
 const user = rawValue as User
 const userName = user!.name
 recordScore(scores[0]!)
-// @ts-ignore — never; prefer @ts-expect-error + reason if unavoidable
+// @ts-ignore — never; with the user's OK, @ts-expect-error + reason instead
 
 // ❌ Incorrect: cast after JSON.parse — parsed value is unknown at runtime
 const config = JSON.parse(rawJson) as Config
@@ -44,6 +44,7 @@ function parseUser(value: unknown): User | undefined {
 
 function parseConfig(rawJson: string): Config | undefined {
   const parsedPayload: unknown = JSON.parse(rawJson)
+
   return isConfig(parsedPayload) ? parsedPayload : undefined
 }
 
@@ -81,6 +82,6 @@ const port = parsedPort
 
 // ✅ Correct: as const / satisfies — not a trust boundary cast
 const routes = {
-  home: { path: '/', auth: false },
-} as const satisfies Record<string, { path: string; auth: boolean }>
+  home: { path: '/', isAuthRequired: false },
+} as const satisfies Record<string, { path: string; isAuthRequired: boolean }>
 ```

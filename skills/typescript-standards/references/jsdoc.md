@@ -112,16 +112,30 @@ Don’t put `@private` or `@public` on every function. Skip comments on file-loc
  * @private
  * @summary Internal parse step
  */
-function parseRow(rawPayload: unknown): Row { /* … */ }
+function parseRow(rawPayload: unknown): Row {
+  if (!isRow(rawPayload)) {
+    throw new TypeError('Row payload is missing required fields')
+  }
+
+  return rawPayload
+}
 
 /**
  * @public
  * @summary Public entry
  */
-export function parseRows(rawPayloads: unknown[]): Row[] { /* … */ }
+export function parseRows(rawPayloads: unknown[]): Row[] {
+  return rawPayloads.map(parseRow)
+}
 
 // ✅ Correct: bare helper and export when the code is clear
-function parseRow(rawPayload: unknown): Row { /* … */ }
+function parseRow(rawPayload: unknown): Row {
+  if (!isRow(rawPayload)) {
+    throw new TypeError('Row payload is missing required fields')
+  }
+
+  return rawPayload
+}
 
 export function parseRows(rawPayloads: unknown[]): Row[] {
   return rawPayloads.map(parseRow)
@@ -141,14 +155,14 @@ export function parseRowsForSettingsPackage(rawPayloads: unknown[]): Row[] {
 Don’t put a JSDoc block on every `const` or `let`. Add a comment only when the name and type don’t make the meaning, units, or limits clear enough.
 
 ```typescript
-// ❌ Incorrect: obvious local — no need for a block
+// ❌ Incorrect: obvious constant — no need for a block
 /**
- * @constant {number} retryCount
+ * @constant {number} MAX_RETRIES
  */
-const retryCount = 3
+const MAX_RETRIES = 3
 
 // ✅ Correct: bare when the name is enough
-const retryCount = 3
+const MAX_RETRIES = 3
 export const QUERY_STALE_TIME_MS = 60_000
 
 // ✅ Correct: comment when the “why” or hidden rule isn’t in the name
