@@ -12,5 +12,6 @@
     "verbatimModuleSyntax": true,
     "types": ["bun-types"]
   },
-  "include": ["./mcp/**/*.ts"]
+  "include": ["./mcp/**/*.ts"],
+  "exclude": ["./mcp/examples/monorepo"]
 }

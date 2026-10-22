@@ -25,7 +25,7 @@ describe('stdio-rpc', () => {
 
     const extracted = extractStdinMessage(encodeContentLengthMessage(value));
 
-    expect(extracted).toMatchObject({ kind: 'message', contentLength: true, value });
+    expect(extracted).toMatchObject({ kind: 'message', isContentLengthFramed: true, value });
   });
 
   test('should honor Content-Length when it is not the first header', () => {
@@ -36,7 +36,7 @@ describe('stdio-rpc', () => {
       ]),
     );
 
-    expect(extracted).toMatchObject({ kind: 'message', contentLength: true, value });
+    expect(extracted).toMatchObject({ kind: 'message', isContentLengthFramed: true, value });
   });
 
   test('should keep the following frame when the first JSON payload is invalid', () => {
@@ -62,14 +62,14 @@ describe('stdio-rpc', () => {
     expect(invalids).toHaveLength(1);
     expect(messages).toEqual([validValue]);
     expect(drained.remaining.length).toBe(0);
-    expect(drained.useContentLength).toBe(true);
+    expect(drained.isContentLengthSession).toBe(true);
   });
 
   test('should parse newline-delimited JSON when no headers are present', () => {
     const value = { jsonrpc: '2.0', id: 4, method: 'ping' };
     const extracted = extractStdinMessage(Buffer.from(`${JSON.stringify(value)}\n`));
 
-    expect(extracted).toMatchObject({ kind: 'message', contentLength: false, value });
+    expect(extracted).toMatchObject({ kind: 'message', isContentLengthFramed: false, value });
   });
 
   test('should build a JSON-RPC parse error payload', () => {

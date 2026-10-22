@@ -1,24 +1,31 @@
 export const JSON_RPC_VERSION = '2.0';
 export const JSON_RPC_PARSE_ERROR = -32700;
 
+const LINE_FEED_BYTE = 0x0a;
 const HEADER_NAME_PATTERN = /^[A-Za-z0-9-]+$/;
+const CONTENT_LENGTH_PATTERN = /^\d+$/;
 const CRLF_HEADER_BREAK = Buffer.from('\r\n\r\n');
 const LF_HEADER_BREAK = Buffer.from('\n\n');
 
 export type ExtractedStdin =
   | { kind: 'incomplete' }
-  | { kind: 'invalid'; message: string; rest: Buffer; contentLength: boolean }
-  | { kind: 'skip'; rest: Buffer; contentLength: boolean }
-  | { kind: 'message'; rest: Buffer; contentLength: boolean; value: unknown };
+  | { kind: 'invalid'; message: string; rest: Buffer; isContentLengthFramed: boolean }
+  | { kind: 'skip'; rest: Buffer; isContentLengthFramed: boolean }
+  | { kind: 'message'; rest: Buffer; isContentLengthFramed: boolean; value: unknown };
 
 export interface DrainStdinResult {
+  isContentLengthSession: boolean;
   remaining: Buffer;
-  useContentLength: boolean;
 }
 
 export interface StdinMessageHandlers {
-  onMessage: (value: unknown, contentLength: boolean) => void;
-  onInvalid: (message: string, contentLength: boolean) => void;
+  onMessage: (value: unknown, isContentLengthFramed: boolean) => void;
+  onInvalid: (message: string, isContentLengthFramed: boolean) => void;
+}
+
+interface FrameHeader {
+  name: string;
+  value: string;
 }
 
 /**
@@ -31,53 +38,59 @@ export function extractStdinMessage(buffer: Buffer): ExtractedStdin {
     return { kind: 'incomplete' };
   }
 
-  if (looksLikeHeaderBlock(buffer)) {
+  if (startsWithHeaderLine(buffer)) {
     return extractHeaderFramedMessage(buffer);
   }
 
   return extractNewlineMessage(buffer);
 }
 
+/**
+ * Hands every complete frame in 'buffer' to 'handlers'. Once one frame is Content-Length framed,
+ * the session stays Content-Length framed so replies use the same framing.
+ *
+ * @returns The bytes of the incomplete trailing frame and whether the session is Content-Length framed
+ */
 export function drainStdinBuffer(
   buffer: Buffer,
-  useContentLength: boolean,
+  isContentLengthSession: boolean,
   handlers: StdinMessageHandlers,
 ): DrainStdinResult {
-  let remaining: Buffer = buffer;
-  let contentLength = useContentLength;
+  let remaining = buffer;
+  let isContentLengthFramed = isContentLengthSession;
 
   while (true) {
-    const extracted = extractStdinMessage(remaining);
+    const frame = extractStdinMessage(remaining);
 
-    switch (extracted.kind) {
+    switch (frame.kind) {
       case 'incomplete':
-        return { remaining, useContentLength: contentLength };
+        return { isContentLengthSession: isContentLengthFramed, remaining };
       case 'invalid': {
-        remaining = extracted.rest;
+        remaining = frame.rest;
 
-        if (extracted.contentLength) {
-          contentLength = true;
+        if (frame.isContentLengthFramed) {
+          isContentLengthFramed = true;
         }
 
-        handlers.onInvalid(extracted.message, contentLength);
+        handlers.onInvalid(frame.message, isContentLengthFramed);
         break;
       }
       case 'skip':
       case 'message': {
-        remaining = extracted.rest;
+        remaining = frame.rest;
 
-        if (extracted.contentLength) {
-          contentLength = true;
+        if (frame.isContentLengthFramed) {
+          isContentLengthFramed = true;
         }
 
-        if (extracted.kind === 'message') {
-          handlers.onMessage(extracted.value, contentLength);
+        if (frame.kind === 'message') {
+          handlers.onMessage(frame.value, isContentLengthFramed);
         }
 
         break;
       }
       default: {
-        const exhaustiveCheck: never = extracted;
+        const exhaustiveCheck: never = frame;
 
         return exhaustiveCheck;
       }
@@ -85,12 +98,12 @@ export function drainStdinBuffer(
   }
 }
 
-export function writeJsonRpcMessage(payload: unknown, contentLength: boolean): void {
+export function writeJsonRpcMessage(payload: unknown, isContentLengthFramed: boolean): void {
   const json = JSON.stringify(payload);
 
-  if (contentLength) {
-    const bytes = Buffer.byteLength(json, 'utf8');
-    process.stdout.write(`Content-Length: ${bytes}\r\n\r\n${json}`);
+  if (isContentLengthFramed) {
+    process.stdout.write(`Content-Length: ${Buffer.byteLength(json, 'utf8')}\r\n\r\n${json}`);
+
     return;
   }
 
@@ -106,45 +119,47 @@ export function createParseErrorPayload(message: string): unknown {
 }
 
 function extractHeaderFramedMessage(buffer: Buffer): ExtractedStdin {
-  const split = findHeaderBodySplit(buffer);
+  const bodyStart = findBodyStart(buffer);
 
-  if (split === undefined) {
+  if (bodyStart === undefined) {
     return { kind: 'incomplete' };
   }
 
-  const headerBlock = buffer.subarray(0, split.bodyStart).toString('utf8');
+  const headerBlock = buffer.subarray(0, bodyStart).toString('utf8');
   const contentLength = parseContentLength(parseHeaders(headerBlock));
 
   if (contentLength === undefined) {
     return {
       kind: 'invalid',
       message: 'Missing Content-Length header',
-      rest: buffer.subarray(split.bodyStart),
-      contentLength: false,
+      rest: buffer.subarray(bodyStart),
+      isContentLengthFramed: false,
     };
   }
 
-  return extractContentLengthMessage(buffer, split.bodyStart, contentLength);
+  return extractContentLengthMessage(buffer, bodyStart, contentLength);
 }
 
 function extractContentLengthMessage(
   buffer: Buffer,
   bodyStart: number,
-  length: number,
+  bodyLength: number,
 ): ExtractedStdin {
-  if (buffer.length < bodyStart + length) {
+  const bodyEnd = bodyStart + bodyLength;
+
+  if (buffer.length < bodyEnd) {
     return { kind: 'incomplete' };
   }
 
   return parseStdinJsonMessage(
-    buffer.subarray(bodyStart, bodyStart + length),
-    buffer.subarray(bodyStart + length),
+    buffer.subarray(bodyStart, bodyEnd),
+    buffer.subarray(bodyEnd),
     true,
   );
 }
 
 function extractNewlineMessage(buffer: Buffer): ExtractedStdin {
-  const newlineIndex = buffer.indexOf(0x0a);
+  const newlineIndex = buffer.indexOf(LINE_FEED_BYTE);
 
   if (newlineIndex === -1) {
     return { kind: 'incomplete' };
@@ -153,19 +168,23 @@ function extractNewlineMessage(buffer: Buffer): ExtractedStdin {
   const line = buffer.subarray(0, newlineIndex).toString('utf8').replace(/\r$/, '').trim();
   const rest = buffer.subarray(newlineIndex + 1);
 
-  if (line.length === 0) {
-    return { kind: 'skip', rest, contentLength: false };
+  if (!line) {
+    return { kind: 'skip', rest, isContentLengthFramed: false };
   }
 
   return parseStdinJsonMessage(Buffer.from(line, 'utf8'), rest, false);
 }
 
-function parseStdinJsonMessage(body: Buffer, rest: Buffer, contentLength: boolean): ExtractedStdin {
+function parseStdinJsonMessage(
+  body: Buffer,
+  rest: Buffer,
+  isContentLengthFramed: boolean,
+): ExtractedStdin {
   try {
     return {
       kind: 'message',
       rest,
-      contentLength,
+      isContentLengthFramed,
       value: JSON.parse(body.toString('utf8')),
     };
   } catch (caught) {
@@ -173,13 +192,13 @@ function parseStdinJsonMessage(body: Buffer, rest: Buffer, contentLength: boolea
       kind: 'invalid',
       message: caught instanceof Error ? caught.message : 'Invalid JSON',
       rest,
-      contentLength,
+      isContentLengthFramed,
     };
   }
 }
 
-function looksLikeHeaderBlock(buffer: Buffer): boolean {
-  const newlineIndex = buffer.indexOf(0x0a);
+function startsWithHeaderLine(buffer: Buffer): boolean {
+  const newlineIndex = buffer.indexOf(LINE_FEED_BYTE);
   const firstLine = (newlineIndex === -1 ? buffer : buffer.subarray(0, newlineIndex)).toString(
     'utf8',
   );
@@ -192,50 +211,66 @@ function looksLikeHeaderBlock(buffer: Buffer): boolean {
   return HEADER_NAME_PATTERN.test(firstLine.slice(0, colonIndex).trim());
 }
 
-function findHeaderBodySplit(buffer: Buffer): { bodyStart: number } | undefined {
+/**
+ * @returns The byte offset right after the first blank line ('\r\n\r\n' or '\n\n', whichever comes
+ * first), or 'undefined' when the headers are not complete yet
+ */
+function findBodyStart(buffer: Buffer): number | undefined {
   const crlfIndex = buffer.indexOf(CRLF_HEADER_BREAK);
   const lfIndex = buffer.indexOf(LF_HEADER_BREAK);
 
   if (crlfIndex === -1 && lfIndex === -1) {
-    return undefined;
+    return;
   }
 
   if (crlfIndex === -1) {
-    return { bodyStart: lfIndex + LF_HEADER_BREAK.length };
+    return lfIndex + LF_HEADER_BREAK.length;
   }
 
   if (lfIndex === -1 || crlfIndex <= lfIndex) {
-    return { bodyStart: crlfIndex + CRLF_HEADER_BREAK.length };
+    return crlfIndex + CRLF_HEADER_BREAK.length;
   }
 
-  return { bodyStart: lfIndex + LF_HEADER_BREAK.length };
+  return lfIndex + LF_HEADER_BREAK.length;
 }
 
 function parseHeaders(headerBlock: string): Map<string, string> {
   const headers = new Map<string, string>();
 
   for (const line of headerBlock.split(/\r?\n/)) {
-    const colonIndex = line.indexOf(':');
+    const header = parseHeaderLine(line);
 
-    if (line.length > 0 && colonIndex > 0) {
-      const name = line.slice(0, colonIndex).trim().toLowerCase();
-      const value = line.slice(colonIndex + 1).trim();
-
-      if (HEADER_NAME_PATTERN.test(name) && value.length > 0) {
-        headers.set(name, value);
-      }
+    if (header) {
+      headers.set(header.name, header.value);
     }
   }
 
   return headers;
 }
 
-function parseContentLength(headers: Map<string, string>): number | undefined {
-  const rawValue = headers.get('content-length');
+function parseHeaderLine(line: string): FrameHeader | undefined {
+  const colonIndex = line.indexOf(':');
 
-  if (rawValue === undefined || !/^\d+$/.test(rawValue)) {
-    return undefined;
+  if (colonIndex <= 0) {
+    return;
   }
 
-  return Number(rawValue);
+  const name = line.slice(0, colonIndex).trim().toLowerCase();
+  const value = line.slice(colonIndex + 1).trim();
+
+  if (!HEADER_NAME_PATTERN.test(name) || !value) {
+    return;
+  }
+
+  return { name, value };
+}
+
+function parseContentLength(headers: Map<string, string>): number | undefined {
+  const rawContentLength = headers.get('content-length');
+
+  if (!rawContentLength || !CONTENT_LENGTH_PATTERN.test(rawContentLength)) {
+    return;
+  }
+
+  return Number(rawContentLength);
 }

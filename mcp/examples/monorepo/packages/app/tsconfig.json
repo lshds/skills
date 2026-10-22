@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "types": [],
+    "paths": {
+      "@example/greet": ["../greet/src/index.ts"],
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

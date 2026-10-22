@@ -86,8 +86,12 @@ mcp/     optional file-lookup (`definition`, `references`)
 ### MCP
 
 Optional. When file-lookup is wired in a session, Supervisor uses
-`definition` / `references` for a named symbol at `file:line`. When it is
-not, search stays Grep/Glob/Read/explore — absence is not an error.
+`definition` / `references` for a named symbol at `file:line` (pass the name
+as `symbol`; the column is optional). In a workspace (`package.json`
+`workspaces` or `pnpm-workspace.yaml`), one TypeScript program spans every
+package's `tsconfig.json`, so `references` includes callers in other
+packages. When it is not wired, search stays Grep/Glob/Read/explore —
+absence is not an error.
 
 | Suite | Covers |
 | --- | --- |

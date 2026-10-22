@@ -1,134 +1,138 @@
-import { realpathSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import ts from 'typescript';
 
+import {
+  createIgnoredPathMatcher,
+  findGeneratedOutputDirectory,
+  isTestFile,
+} from './ignored-paths';
+import { describeNoResult, listCandidatePositions } from './position';
+import { openProject, warmUpRootProject } from './projects';
+import {
+  isNodeModulesPath,
+  isPathInsideRoot,
+  isRecord,
+  LookupError,
+  normalizePath,
+  toRealPathIfExists,
+  toRelativePath,
+} from './shared';
 import { createParseErrorPayload, drainStdinBuffer, writeJsonRpcMessage } from './stdio-rpc';
 import type {
   DefinitionHit,
-  IsIgnoredPath,
   JsonRpcId,
-  JsonRpcRequest,
+  JsonRpcMessage,
   JsonRpcResponse,
   OpenedPosition,
   PositionInput,
-  ProjectSnapshot,
   ReferenceQuery,
   ResolveWorkspaceHit,
   ToolCallParams,
   ToolName,
   WorkspaceDefinition,
+  WorkspaceHit,
 } from './types';
+import { findWorkspaceRoot } from './workspace';
 
+export { findGeneratedOutputDirectory, isTestFile } from './ignored-paths';
 export type { DefinitionHit, PositionInput } from './types';
+export { findWorkspaceRoot } from './workspace';
 
-const PROTOCOL_VERSION = '2024-11-05';
+const SUPPORTED_PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
+const [LATEST_PROTOCOL_VERSION] = SUPPORTED_PROTOCOL_VERSIONS;
 const JSON_RPC_VERSION = '2.0';
+const JSON_RPC_INVALID_REQUEST = -32600;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 const JSON_RPC_SERVER_ERROR = -32000;
 const SNIPPET_LINE_COUNT = 8;
 const REFERENCE_CAP = 40;
 const MAX_OMITTED_DIRECTORIES_SHOWN = 5;
-const MAX_WORKSPACE_ROOT_WALK_DEPTH = 8;
-const GIT_FATAL_EXIT_CODE = 128;
-const TEST_FILE_PATTERN = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
-const NODE_MODULES_DIRECTORY_NAME = 'node_modules';
-const GENERATED_DIRECTORY_NAMES = new Set(['dist', 'build', 'out', 'coverage']);
+const MAX_ALSO_DEFINED_SHOWN = 5;
 
 const TOOL_NAMES = {
   definition: 'definition',
   references: 'references',
 } as const satisfies { readonly [Name in ToolName]: Name };
 
-const INITIALIZE_RESULT = {
-  protocolVersion: PROTOCOL_VERSION,
-  capabilities: { tools: {} },
-  serverInfo: { name: 'file-lookup', version: '0.1.0' },
-} as const;
+const SERVER_INFO = { name: 'file-lookup', version: '0.2.0' } as const;
 
-const documentRegistry = ts.createDocumentRegistry();
-const languageServicesByConfigPath = new Map<string, ts.LanguageService>();
-const projectSnapshotsByConfigPath = new Map<string, ProjectSnapshot>();
-
-let cachedWorkspaceRoot: string | undefined;
-let isGitUnavailable = false;
+let isWarmUpScheduled = false;
 
 /**
- * Walks up from cwd, then this module, looking for a workspace root.
- *
- * A root is a directory with 'pnpm-workspace.yaml' or a 'package.json' that
- * declares 'workspaces' (npm, yarn, bun). A nested 'package.json' without
- * 'workspaces' is not a root. The result is memoized for the process lifetime.
- *
- * @returns The real path of that directory, or the real path of 'process.cwd()' if none is found
- */
-export function findWorkspaceRoot(): string {
-  cachedWorkspaceRoot ??= resolveWorkspaceRoot();
-
-  return cachedWorkspaceRoot;
-}
-
-/**
- * Resolves the TypeScript definition at a 1-based file position.
+ * Resolves the TypeScript definition of the symbol at a 1-based file position.
  *
  * When several definitions exist, the first one outside ignored paths wins
- * (git-ignored, or under 'dist', 'build', 'out', 'coverage'). Definitions in
- * 'node_modules' are never treated as ignored.
+ * (git-ignored, or under 'dist', 'build', 'out', 'coverage'); the other non-ignored ones are
+ * listed in 'otherLocations'. Definitions in 'node_modules' are never treated as ignored.
  *
- * @param positionInput - Workspace-relative TS/TSX 'file' with 1-based 'line' and 'character'
- * @returns A {@link DefinitionHit} with a 'path:line' location and a nearby source snippet
+ * @param positionInput - Workspace-relative TS/TSX 'file', 1-based 'line', and 'symbol' and/or 1-based 'character'
+ * @returns A {@link DefinitionHit}: 'path:line' or 'path:start-end' of the declaration and its first lines
  * @throws When the file is outside the workspace, the position is invalid, or no definition exists
  */
 export function findDefinition(positionInput: PositionInput): DefinitionHit {
-  const { fileName, position, program, root, service } = openPosition(positionInput);
-  const definitionInfos = service.getDefinitionAtPosition(fileName, position) ?? [];
-  const firstDefinition = definitionInfos[0];
+  const openedPosition = openPosition(positionInput);
+  const { fileName, program, root, service } = openedPosition;
+  const definitionInfos = queryCandidatePositions(
+    openedPosition,
+    positionInput,
+    TOOL_NAMES.definition,
+    (position) => service.getDefinitionAtPosition(fileName, position) ?? [],
+  );
+  const [pickedDefinition, ...otherDefinitions] = orderWorkspaceDefinitions(
+    definitionInfos,
+    root,
+    program,
+  );
 
-  if (firstDefinition === undefined) {
-    throw new Error(
-      `No definition at ${positionInput.file}:${positionInput.line}:${positionInput.character}`,
-    );
+  if (!pickedDefinition) {
+    const [firstDefinitionInfo] = definitionInfos;
+
+    throw new LookupError(`Definition is outside the workspace: ${firstDefinitionInfo.fileName}`);
   }
-
-  const workspaceDefinition = pickWorkspaceDefinition(definitionInfos, root, program);
-
-  if (workspaceDefinition === undefined) {
-    throw new Error(`Definition is outside the workspace: ${firstDefinition.fileName}`);
-  }
-
-  const { definitionInfo, workspaceHit } = workspaceDefinition;
 
   return {
-    location: workspaceHit.location,
-    snippet: readSnippet(
-      readSourceFile(program, definitionInfo.fileName),
-      definitionInfo.textSpan.start,
-    ),
+    location: pickedDefinition.location,
+    otherLocations: otherDefinitions.map(({ location }) => location),
+    snippet: readSnippet(pickedDefinition),
   };
 }
 
 /**
- * Lists TypeScript reference locations at a 1-based file position.
+ * Lists TypeScript reference locations of the symbol at a 1-based file position, across every
+ * project the file's program spans (all package tsconfigs in a workspace).
  *
  * Omits 'node_modules', test files unless 'includeTests', and ignored paths:
  * git-ignored files plus anything under 'dist', 'build', 'out' or 'coverage'.
  *
- * @param positionInput - Workspace-relative TS/TSX 'file' with 1-based 'line' and 'character'. Pass 'includeTests' to keep test files.
- * @returns Workspace-relative 'path:line' strings, at most 40 entries, then '… truncated N' when more exist and '… omitted N in ignored paths (dirs)' when ignored hits were dropped
+ * @param positionInput - Workspace-relative TS/TSX 'file', 1-based 'line', and 'symbol' and/or 1-based 'character'. Pass 'includeTests' to keep test files.
+ * @returns 'path:line,line' per file with at most 40 lines in total, then '… truncated N' when more exist, '… omitted N in tests' and '… omitted N in ignored paths (dirs)' when hits were dropped
  * @throws When the file is outside the workspace, the position is invalid, or no references exist
  */
 export function findReferences(positionInput: PositionInput): string[] {
-  const { fileName, position, program, root, service } = openPosition(positionInput);
-  const locations = collectReferenceLocations({
+  const openedPosition = openPosition(positionInput);
+  const { fileName, program, root, service, sourceFile } = openedPosition;
+  const referenceEntries = queryCandidatePositions(
+    openedPosition,
+    positionInput,
+    TOOL_NAMES.references,
+    (position) => service.getReferencesAtPosition(fileName, position) ?? [],
+  );
+  const locations = collectReferenceLines({
     includeTests: positionInput.includeTests ?? false,
     program,
-    referenceEntries: service.getReferencesAtPosition(fileName, position) ?? [],
+    referenceEntries,
     root,
   });
 
   if (locations.length === 0) {
-    throw new Error(
-      `No references at ${positionInput.file}:${positionInput.line}:${positionInput.character}`,
+    throw new LookupError(
+      describeNoResult(
+        TOOL_NAMES.references,
+        sourceFile,
+        positionInput,
+        toRelativePath(root, fileName),
+      ),
     );
   }
 
@@ -136,22 +140,33 @@ export function findReferences(positionInput: PositionInput): string[] {
 }
 
 export function formatDefinition(definitionHit: DefinitionHit): string {
-  return `${definitionHit.location}\n${definitionHit.snippet}`;
+  return [
+    definitionHit.location,
+    definitionHit.snippet,
+    ...formatAlsoDefinedNotice(definitionHit.otherLocations),
+  ].join('\n');
 }
 
 /**
- * Keeps the first 'cap' locations and appends a truncation notice when more exist.
+ * Groups hits per file as 'path:line,line' in first-hit order, keeping the first 'cap' hits.
  *
- * @param locations - Workspace-relative 'path:line' strings
- * @param cap - Maximum locations to keep
- * @returns At most 'cap' locations, plus '… truncated N' when N locations were omitted
+ * @param hits - Unique workspace hits
+ * @returns One entry per file, then '… truncated N' when N hits were cut
  */
-export function capLocations(locations: readonly string[], cap = REFERENCE_CAP): string[] {
-  if (locations.length <= cap) {
-    return [...locations];
-  }
+export function formatReferenceLines(
+  hits: readonly WorkspaceHit[],
+  cap = REFERENCE_CAP,
+): string[] {
+  const hitsByPath = Map.groupBy(hits.slice(0, cap), (hit) => hit.relativePath);
+  const fileEntries = [...hitsByPath].map(
+    ([relativePath, fileHits]) =>
+      `${relativePath}:${fileHits
+        .map(({ line }) => line)
+        .toSorted((left, right) => left - right)
+        .join(',')}`,
+  );
 
-  return [...locations.slice(0, cap), `… truncated ${locations.length - cap}`];
+  return hits.length > cap ? [...fileEntries, `… truncated ${hits.length - cap}`] : fileEntries;
 }
 
 /**
@@ -163,93 +178,42 @@ export function formatOmittedNotice(
   omittedDirectories: readonly string[],
   omittedCount: number,
 ): string {
-  const uniqueDirectories = [...new Set(omittedDirectories)].toSorted();
-  const shownDirectories = uniqueDirectories.slice(0, MAX_OMITTED_DIRECTORIES_SHOWN);
-  const hiddenDirectoryCount = uniqueDirectories.length - shownDirectories.length;
-  const directoryLabels =
-    hiddenDirectoryCount > 0
-      ? [...shownDirectories, `+${hiddenDirectoryCount} more`]
-      : shownDirectories;
+  const directoryLabels = limitList(
+    [...new Set(omittedDirectories)].toSorted(),
+    MAX_OMITTED_DIRECTORIES_SHOWN,
+  );
 
   return `… omitted ${omittedCount} in ignored paths (${directoryLabels.join(', ')})`;
 }
 
-/**
- * @param relativePath - Workspace-relative path with '/' separators
- * @returns The path up to and including the first 'dist', 'build', 'out' or 'coverage' directory, or 'undefined' when there is none
- */
-export function findGeneratedOutputDirectory(relativePath: string): string | undefined {
-  const segments = relativePath.split('/');
-  const generatedSegmentIndex = segments
-    .slice(0, -1)
-    .findIndex((segment) => GENERATED_DIRECTORY_NAMES.has(segment));
-
-  if (generatedSegmentIndex === -1) {
-    return undefined;
-  }
-
-  return segments.slice(0, generatedSegmentIndex + 1).join('/');
-}
-
 function openPosition(positionInput: PositionInput): OpenedPosition {
   const root = findWorkspaceRoot();
-  const absoluteFilePath = resolveWorkspaceFile(root, positionInput.file);
-  const configPath = findConfigPath(absoluteFilePath);
-
-  refreshProject(configPath, absoluteFilePath);
-
-  const service = getLanguageService(configPath);
-  const program = service.getProgram();
-  const sourceFile = program === undefined ? undefined : findSourceFile(program, absoluteFilePath);
-
-  if (program === undefined || sourceFile === undefined) {
-    throw new Error(
-      `File is not in the TypeScript project: ${toRelativePath(root, absoluteFilePath)}`,
-    );
-  }
-
-  return {
-    fileName: sourceFile.fileName,
-    position: toSourcePosition(sourceFile, positionInput, root),
-    program,
+  const { program, service, sourceFile } = openProject(
     root,
-    service,
-  };
+    resolveWorkspaceFile(root, positionInput.file),
+  );
+
+  return { fileName: sourceFile.fileName, program, root, service, sourceFile };
 }
 
-function toSourcePosition(
-  sourceFile: ts.SourceFile,
+function queryCandidatePositions<Result>(
+  openedPosition: OpenedPosition,
   positionInput: PositionInput,
-  root: string,
-): number {
-  const lineIndex = positionInput.line - 1;
-  const characterIndex = positionInput.character - 1;
+  toolName: ToolName,
+  queryAtPosition: (position: number) => readonly Result[],
+): readonly Result[] {
+  const { fileName, root, sourceFile } = openedPosition;
+  const displayPath = toRelativePath(root, fileName);
 
-  if (lineIndex < 0 || characterIndex < 0) {
-    throw new Error('line and character are 1-based');
+  for (const position of listCandidatePositions(sourceFile, positionInput, displayPath)) {
+    const results = queryAtPosition(position);
+
+    if (results.length > 0) {
+      return results;
+    }
   }
 
-  try {
-    return ts.getPositionOfLineAndCharacter(sourceFile, lineIndex, characterIndex);
-  } catch {
-    throw new Error(
-      `Position ${positionInput.line}:${positionInput.character} is out of range in ${toRelativePath(root, sourceFile.fileName)}`,
-    );
-  }
-}
-
-function findSourceFile(program: ts.Program, fileName: string): ts.SourceFile | undefined {
-  const sourceFile = program.getSourceFile(fileName);
-
-  if (sourceFile !== undefined) {
-    return sourceFile;
-  }
-
-  const normalizedFileName = normalizePath(fileName);
-
-  return program
-    .getSourceFiles()
-    .find((candidate) => normalizePath(candidate.fileName) === normalizedFileName);
+  throw new LookupError(describeNoResult(toolName, sourceFile, positionInput, displayPath));
 }
 
 function readSourceFile(program: ts.Program, fileName: string): ts.SourceFile {
@@ -259,152 +223,24 @@ function readSourceFile(program: ts.Program, fileName: string): ts.SourceFile {
   );
 }
 
-function findConfigPath(fileName: string): string {
-  const configPath = ts.findConfigFile(dirname(fileName), ts.sys.fileExists, 'tsconfig.json');
-
-  if (configPath === undefined) {
-    throw new Error(`No tsconfig.json for ${fileName}`);
-  }
-
-  return configPath;
-}
-
-function refreshProject(configPath: string, requestedFileName?: string): void {
-  const previousSnapshot = projectSnapshotsByConfigPath.get(configPath);
-  const configMtimeMs = statSync(configPath, { throwIfNoEntry: false })?.mtimeMs ?? 0;
-  const parsedConfig = parseConfigFile(configPath);
-  const extraFileNames = addExtraFileName(
-    previousSnapshot?.extraFileNames ?? new Set<string>(),
-    requestedFileName,
-  );
-  const compilerOptions =
-    previousSnapshot?.configMtimeMs === configMtimeMs
-      ? previousSnapshot.compilerOptions
-      : toLookupCompilerOptions(parsedConfig.options);
-
-  projectSnapshotsByConfigPath.set(configPath, {
-    compilerOptions,
-    configMtimeMs,
-    extraFileNames,
-    fileNames: mergeProjectFileNames(parsedConfig.fileNames, extraFileNames),
-    version: (previousSnapshot?.version ?? 0) + 1,
-  });
-}
-
-function addExtraFileName(
-  extraFileNames: ReadonlySet<string>,
-  fileName: string | undefined,
-): ReadonlySet<string> {
-  if (fileName === undefined || extraFileNames.has(fileName)) {
-    return extraFileNames;
-  }
-
-  return new Set([...extraFileNames, fileName]);
-}
-
-function mergeProjectFileNames(
-  configFileNames: readonly string[],
-  extraFileNames: ReadonlySet<string>,
-): string[] {
-  return [...new Set([...configFileNames.map(normalizePath), ...extraFileNames])];
-}
-
-function parseConfigFile(configPath: string): ts.ParsedCommandLine {
-  const configFileRead = ts.readConfigFile(configPath, ts.sys.readFile);
-
-  if (configFileRead.error !== undefined) {
-    throw new Error(ts.flattenDiagnosticMessageText(configFileRead.error.messageText, '\n'));
-  }
-
-  return ts.parseJsonConfigFileContent(configFileRead.config, ts.sys, dirname(configPath));
-}
-
-function toLookupCompilerOptions(compilerOptions: ts.CompilerOptions): ts.CompilerOptions {
-  return {
-    ...compilerOptions,
-    composite: false,
-    incremental: false,
-    plugins: [],
-    tsBuildInfoFile: undefined,
-  };
-}
-
-function getLanguageService(configPath: string): ts.LanguageService {
-  const cachedService = languageServicesByConfigPath.get(configPath);
-
-  if (cachedService !== undefined) {
-    return cachedService;
-  }
-
-  const service = createLanguageService(configPath);
-  languageServicesByConfigPath.set(configPath, service);
-
-  return service;
-}
-
-function createLanguageService(configPath: string): ts.LanguageService {
-  const configDirectory = dirname(configPath);
-  const readSnapshot = () => projectSnapshotsByConfigPath.get(configPath);
-
-  const host: ts.LanguageServiceHost = {
-    directoryExists: ts.sys.directoryExists,
-    fileExists: ts.sys.fileExists,
-    getCompilationSettings: () => readSnapshot()?.compilerOptions ?? {},
-    getCurrentDirectory: () => configDirectory,
-    getDefaultLibFileName: (compilerOptionsForLib) =>
-      ts.getDefaultLibFilePath(compilerOptionsForLib),
-    getDirectories: ts.sys.getDirectories,
-    getProjectVersion: () => String(readSnapshot()?.version ?? 0),
-    getScriptFileNames: () => [...(readSnapshot()?.fileNames ?? [])],
-    getScriptSnapshot: (scriptFileName) => {
-      const text = ts.sys.readFile(scriptFileName);
-
-      if (text === undefined) {
-        return undefined;
-      }
-
-      return ts.ScriptSnapshot.fromString(text);
-    },
-    getScriptVersion: readScriptVersion,
-    readDirectory: ts.sys.readDirectory,
-    readFile: ts.sys.readFile,
-    realpath: ts.sys.realpath,
-    useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
-  };
-
-  return ts.createLanguageService(host, documentRegistry);
-}
-
-function readScriptVersion(fileName: string): string {
-  const stats = statSync(fileName, { throwIfNoEntry: false });
-
-  return stats === undefined ? '0' : `${stats.mtimeMs}:${stats.size}`;
-}
-
 function resolveWorkspaceFile(root: string, filePath: string): string {
   const absoluteFilePath = normalizePath(resolve(root, filePath));
 
   if (!isPathInsideRoot(root, absoluteFilePath)) {
-    throw new Error('Path is outside the workspace');
+    throw new LookupError('Path is outside the workspace');
   }
 
   const realFilePath = toRealPathIfExists(absoluteFilePath);
 
   if (!isPathInsideRoot(root, realFilePath)) {
-    throw new Error('Path is outside the workspace');
+    throw new LookupError('Path is outside the workspace');
   }
 
   if (!ts.sys.fileExists(realFilePath)) {
-    throw new Error(`File not found: ${toRelativePath(root, realFilePath)}`);
+    throw new LookupError(`File not found: ${toRelativePath(root, realFilePath)}`);
   }
 
   return realFilePath;
-}
-
-function isPathInsideRoot(root: string, filePath: string): boolean {
-  const relativePath = relative(root, filePath).replaceAll('\\', '/');
-
-  return relativePath !== '..' && !relativePath.startsWith('../');
 }
 
 function createWorkspaceHitResolver(root: string, program: ts.Program): ResolveWorkspaceHit {
@@ -427,224 +263,164 @@ function createWorkspaceHitResolver(root: string, program: ts.Program): ResolveW
   return (fileName, start) => {
     const relativePath = resolveRelativePath(fileName);
 
-    if (relativePath === undefined) {
-      return undefined;
+    if (!relativePath) {
+      return;
     }
 
     const { line } = ts.getLineAndCharacterOfPosition(readSourceFile(program, fileName), start);
 
-    return { location: `${relativePath}:${line + 1}`, relativePath };
+    return { line: line + 1, relativePath };
   };
 }
 
-function readSnippet(sourceFile: ts.SourceFile, start: number): string {
+function toWorkspaceDefinition(
+  root: string,
+  program: ts.Program,
+  definitionInfo: ts.DefinitionInfo,
+): WorkspaceDefinition | undefined {
+  const realFilePath = toRealPathIfExists(definitionInfo.fileName);
+
+  if (!isPathInsideRoot(root, realFilePath)) {
+    return;
+  }
+
+  const sourceFile = readSourceFile(program, definitionInfo.fileName);
+  const relativePath = toRelativePath(root, realFilePath);
+  const { contextSpan, textSpan } = definitionInfo;
+  const startLine = sourceFile.getLineAndCharacterOfPosition((contextSpan ?? textSpan).start).line;
+  const endLine = contextSpan
+    ? sourceFile.getLineAndCharacterOfPosition(contextSpan.start + contextSpan.length).line
+    : startLine + SNIPPET_LINE_COUNT - 1;
+  const location =
+    contextSpan && endLine !== startLine
+      ? `${relativePath}:${startLine + 1}-${endLine + 1}`
+      : `${relativePath}:${startLine + 1}`;
+
+  return { endLine, location, relativePath, sourceFile, startLine };
+}
+
+function readSnippet({ endLine, sourceFile, startLine }: WorkspaceDefinition): string {
+  const lastLine = Math.min(endLine, startLine + SNIPPET_LINE_COUNT - 1);
   const lineStarts = sourceFile.getLineStarts();
-  const { line } = ts.getLineAndCharacterOfPosition(sourceFile, start);
-  const snippetStart = lineStarts[line] ?? 0;
-  const snippetEnd = lineStarts[line + SNIPPET_LINE_COUNT] ?? sourceFile.text.length;
+  const snippetStart = lineStarts[startLine] ?? 0;
+  const snippetEnd = lineStarts[lastLine + 1] ?? sourceFile.text.length;
 
   return sourceFile.text
     .slice(snippetStart, snippetEnd)
     .split(/\r?\n/)
-    .slice(0, SNIPPET_LINE_COUNT)
+    .slice(0, lastLine - startLine + 1)
     .join('\n');
 }
 
-function pickWorkspaceDefinition(
+/**
+ * @returns Workspace definitions without duplicates, the first one outside ignored paths first,
+ * followed by the other non-ignored ones; only the first definition when all are ignored
+ */
+function orderWorkspaceDefinitions(
   definitionInfos: readonly ts.DefinitionInfo[],
   root: string,
   program: ts.Program,
-): WorkspaceDefinition | undefined {
-  const resolveWorkspaceHit = createWorkspaceHitResolver(root, program);
-  const workspaceDefinitions = definitionInfos.flatMap((definitionInfo) => {
-    const workspaceHit = resolveWorkspaceHit(definitionInfo.fileName, definitionInfo.textSpan.start);
+): WorkspaceDefinition[] {
+  const workspaceDefinitions = dedupeBy(
+    definitionInfos.flatMap((definitionInfo) => {
+      const workspaceDefinition = toWorkspaceDefinition(root, program, definitionInfo);
 
-    return workspaceHit === undefined ? [] : [{ definitionInfo, workspaceHit }];
-  });
-  const firstWorkspaceDefinition = workspaceDefinitions[0];
+      return workspaceDefinition ? [workspaceDefinition] : [];
+    }),
+    ({ location }) => location,
+  );
 
   if (workspaceDefinitions.length <= 1) {
-    return firstWorkspaceDefinition;
+    return workspaceDefinitions;
   }
 
-  const candidatePaths = workspaceDefinitions
-    .map(({ workspaceHit }) => workspaceHit.relativePath)
-    .filter((relativePath) => !isNodeModulesPath(relativePath));
-  const isIgnoredPath = createIgnoredPathMatcher(root, candidatePaths);
-
-  return (
-    workspaceDefinitions.find(
-      ({ workspaceHit }) =>
-        isNodeModulesPath(workspaceHit.relativePath) || !isIgnoredPath(workspaceHit.relativePath),
-    ) ?? firstWorkspaceDefinition
-  );
-}
-
-function collectReferenceLocations(referenceQuery: ReferenceQuery): string[] {
-  const { includeTests, program, referenceEntries, root } = referenceQuery;
-  const resolveWorkspaceHit = createWorkspaceHitResolver(root, program);
-  const workspaceHits = referenceEntries
-    .filter((referenceEntry) => includeTests || !isTestFile(referenceEntry.fileName))
-    .map((referenceEntry) =>
-      resolveWorkspaceHit(referenceEntry.fileName, referenceEntry.textSpan.start),
-    )
-    .filter((workspaceHit) => workspaceHit !== undefined)
-    .filter((workspaceHit) => !isNodeModulesPath(workspaceHit.relativePath));
   const isIgnoredPath = createIgnoredPathMatcher(
     root,
-    workspaceHits.map((workspaceHit) => workspaceHit.relativePath),
+    workspaceDefinitions
+      .map(({ relativePath }) => relativePath)
+      .filter((relativePath) => !isNodeModulesPath(relativePath)),
   );
-  const keptLocations = workspaceHits
-    .filter((workspaceHit) => !isIgnoredPath(workspaceHit.relativePath))
-    .map((workspaceHit) => workspaceHit.location);
-  const omittedHits = workspaceHits.filter((workspaceHit) =>
-    isIgnoredPath(workspaceHit.relativePath),
+  const keptDefinitions = workspaceDefinitions.filter(
+    ({ relativePath }) => isNodeModulesPath(relativePath) || !isIgnoredPath(relativePath),
   );
-  const omittedCount = new Set(omittedHits.map((workspaceHit) => workspaceHit.location)).size;
-  const cappedLocations = capLocations([...new Set(keptLocations)]);
 
-  if (omittedCount === 0) {
-    return cappedLocations;
+  return keptDefinitions.length > 0 ? keptDefinitions : workspaceDefinitions.slice(0, 1);
+}
+
+function collectReferenceLines(referenceQuery: ReferenceQuery): string[] {
+  const { includeTests, program, referenceEntries, root } = referenceQuery;
+  const resolveWorkspaceHit = createWorkspaceHitResolver(root, program);
+  const workspaceHits = dedupeBy(
+    referenceEntries.flatMap((referenceEntry) => {
+      const workspaceHit = resolveWorkspaceHit(
+        referenceEntry.fileName,
+        referenceEntry.textSpan.start,
+      );
+
+      return workspaceHit && !isNodeModulesPath(workspaceHit.relativePath) ? [workspaceHit] : [];
+    }),
+    ({ line, relativePath }) => `${relativePath}:${line}`,
+  );
+  const isOmittedTestHit = ({ relativePath }: WorkspaceHit) =>
+    !includeTests && isTestFile(relativePath);
+  const sourceHits = workspaceHits.filter((workspaceHit) => !isOmittedTestHit(workspaceHit));
+  const isIgnoredPath = createIgnoredPathMatcher(
+    root,
+    sourceHits.map(({ relativePath }) => relativePath),
+  );
+
+  return [
+    ...formatReferenceLines(sourceHits.filter(({ relativePath }) => !isIgnoredPath(relativePath))),
+    ...formatOmittedTestsNotice(workspaceHits.filter(isOmittedTestHit)),
+    ...formatOmittedIgnoredNotice(
+      sourceHits.filter(({ relativePath }) => isIgnoredPath(relativePath)),
+    ),
+  ];
+}
+
+function formatOmittedTestsNotice(testHits: readonly WorkspaceHit[]): string[] {
+  return testHits.length > 0 ? [`… omitted ${testHits.length} in tests`] : [];
+}
+
+function formatOmittedIgnoredNotice(ignoredHits: readonly WorkspaceHit[]): string[] {
+  if (ignoredHits.length === 0) {
+    return [];
   }
 
-  const omittedDirectories = omittedHits.map(
+  const ignoredDirectories = ignoredHits.map(
     ({ relativePath }) => findGeneratedOutputDirectory(relativePath) ?? dirname(relativePath),
   );
 
-  return [...cappedLocations, formatOmittedNotice(omittedDirectories, omittedCount)];
+  return [formatOmittedNotice(ignoredDirectories, ignoredHits.length)];
 }
 
-function createIgnoredPathMatcher(root: string, relativePaths: readonly string[]): IsIgnoredPath {
-  const gitCandidatePaths = [...new Set(relativePaths)].filter(
-    (relativePath) => findGeneratedOutputDirectory(relativePath) === undefined,
-  );
-  const gitIgnoredPaths = listGitIgnoredPaths(root, gitCandidatePaths);
-
-  return (relativePath) =>
-    findGeneratedOutputDirectory(relativePath) !== undefined || gitIgnoredPaths.has(relativePath);
+function formatAlsoDefinedNotice(locations: readonly string[]): string[] {
+  return locations.length > 0
+    ? [`… also defined at ${limitList(locations, MAX_ALSO_DEFINED_SHOWN).join(', ')}`]
+    : [];
 }
 
-function listGitIgnoredPaths(root: string, relativePaths: readonly string[]): ReadonlySet<string> {
-  if (
-    relativePaths.length === 0 ||
-    isGitUnavailable ||
-    !ts.sys.fileExists(join(root, '.gitignore'))
-  ) {
-    return new Set();
-  }
+function limitList(items: readonly string[], maxShownCount: number): string[] {
+  const shownItems = items.slice(0, maxShownCount);
+  const hiddenCount = items.length - shownItems.length;
 
-  const checkIgnoreOutput = runGitCheckIgnore(root, relativePaths);
-
-  if (checkIgnoreOutput === undefined) {
-    return new Set();
-  }
-
-  return new Set(checkIgnoreOutput.split('\0').filter((ignoredPath) => ignoredPath.length > 0));
+  return hiddenCount > 0 ? [...shownItems, `+${hiddenCount} more`] : shownItems;
 }
 
-function runGitCheckIgnore(root: string, relativePaths: readonly string[]): string | undefined {
-  try {
-    const { exitCode, stdout } = Bun.spawnSync(['git', 'check-ignore', '--stdin', '-z'], {
-      cwd: root,
-      stdin: Buffer.from(relativePaths.join('\0')),
-      stderr: 'ignore',
-    });
+function dedupeBy<Item>(items: readonly Item[], toKey: (item: Item) => string): Item[] {
+  const seenKeys = new Set<string>();
 
-    if (exitCode === GIT_FATAL_EXIT_CODE) {
-      isGitUnavailable = true;
-    }
+  return items.filter((item) => {
+    const key = toKey(item);
 
-    return exitCode === 0 ? stdout.toString() : undefined;
-  } catch {
-    isGitUnavailable = true;
-
-    return undefined;
-  }
-}
-
-function isNodeModulesPath(relativePath: string): boolean {
-  return relativePath.split('/').includes(NODE_MODULES_DIRECTORY_NAME);
-}
-
-function isTestFile(filePath: string): boolean {
-  const normalizedPath = filePath.replaceAll('\\', '/');
-
-  return TEST_FILE_PATTERN.test(normalizedPath) || normalizedPath.includes('/__tests__/');
-}
-
-function resolveWorkspaceRoot(): string {
-  const markedDirectory =
-    walkToWorkspaceMarker(process.cwd()) ?? walkToWorkspaceMarker(import.meta.dir);
-
-  return toRealPathIfExists(markedDirectory ?? process.cwd());
-}
-
-function walkToWorkspaceMarker(startDirectory: string): string | undefined {
-  let directory = startDirectory;
-
-  for (let depth = 0; depth < MAX_WORKSPACE_ROOT_WALK_DEPTH; depth += 1) {
-    if (isWorkspaceRootDirectory(directory)) {
-      return directory;
-    }
-
-    const parentDirectory = dirname(directory);
-
-    if (parentDirectory === directory) {
-      return undefined;
-    }
-
-    directory = parentDirectory;
-  }
-
-  return undefined;
-}
-
-function isWorkspaceRootDirectory(directory: string): boolean {
-  if (ts.sys.fileExists(join(directory, 'pnpm-workspace.yaml'))) {
-    return true;
-  }
-
-  return hasPackageJsonWorkspaces(join(directory, 'package.json'));
-}
-
-function hasPackageJsonWorkspaces(packageJsonPath: string): boolean {
-  const text = ts.sys.readFile(packageJsonPath);
-
-  if (text === undefined) {
-    return false;
-  }
-
-  try {
-    const packageJson: unknown = JSON.parse(text);
-
-    if (!isRecord(packageJson)) {
+    if (seenKeys.has(key)) {
       return false;
     }
 
-    return packageJson.workspaces !== undefined;
-  } catch {
-    return false;
-  }
-}
+    seenKeys.add(key);
 
-function toRealPathIfExists(filePath: string): string {
-  try {
-    return normalizePath(realpathSync(filePath));
-  } catch {
-    return normalizePath(filePath);
-  }
-}
-
-function toRelativePath(root: string, filePath: string): string {
-  return relative(root, filePath).replaceAll('\\', '/');
-}
-
-function normalizePath(filePath: string): string {
-  return resolve(filePath).replaceAll('\\', '/');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+    return true;
+  });
 }
 
 function parseJsonRpcId(value: unknown): JsonRpcId | undefined {
@@ -656,36 +432,44 @@ function parseJsonRpcId(value: unknown): JsonRpcId | undefined {
     return value;
   }
 
-  return undefined;
+  return;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
 }
 
 function parsePositionInput(rawValue: unknown): PositionInput {
   if (!isRecord(rawValue)) {
-    throw new Error('arguments must be an object');
+    throw new LookupError('arguments must be an object');
   }
 
-  const file = rawValue.file;
-  const line = rawValue.line;
-  const character = rawValue.character;
-  const includeTests = rawValue.includeTests;
+  const { file, line } = rawValue;
+  const character = rawValue.character ?? undefined;
+  const symbol = rawValue.symbol ?? undefined;
+  const includeTests = rawValue.includeTests ?? undefined;
 
-  if (typeof file !== 'string' || file.length === 0) {
-    throw new Error('file must be a non-empty string');
+  if (typeof file !== 'string' || !file) {
+    throw new LookupError('file must be a non-empty string');
   }
 
-  if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) {
-    throw new Error('line must be a positive integer');
+  if (!isPositiveInteger(line)) {
+    throw new LookupError('line must be a positive integer');
   }
 
-  if (typeof character !== 'number' || !Number.isInteger(character) || character < 1) {
-    throw new Error('character must be a positive integer');
+  if (character !== undefined && !isPositiveInteger(character)) {
+    throw new LookupError('character must be a positive integer');
+  }
+
+  if (symbol !== undefined && (typeof symbol !== 'string' || !symbol.trim())) {
+    throw new LookupError('symbol must be a non-empty string');
   }
 
   if (includeTests !== undefined && typeof includeTests !== 'boolean') {
-    throw new Error('includeTests must be a boolean');
+    throw new LookupError('includeTests must be a boolean');
   }
 
-  return { file, line, character, includeTests };
+  return { file, line, character, symbol, includeTests };
 }
 
 function parseToolName(toolName: string): ToolName {
@@ -693,39 +477,59 @@ function parseToolName(toolName: string): ToolName {
     return toolName;
   }
 
-  throw new Error(`Unknown tool: ${toolName}`);
+  throw new LookupError(`Unknown tool: ${toolName}`);
 }
 
 function parseToolCallParams(rawParams: unknown): ToolCallParams {
   if (!isRecord(rawParams)) {
-    throw new Error('params must be an object');
+    throw new LookupError('params must be an object');
   }
 
   const name = rawParams.name;
 
   if (typeof name !== 'string') {
-    throw new Error('tool name is required');
+    throw new LookupError('tool name is required');
   }
 
   return { name, arguments: rawParams.arguments };
 }
 
-function parseJsonRpcRequest(value: unknown): JsonRpcRequest | undefined {
+/**
+ * Classifies one decoded JSON-RPC value. Notifications and responses are ignored; a value that
+ * is neither, or a request with an id that is not a string, number or null, is invalid.
+ */
+function parseJsonRpcMessage(value: unknown): JsonRpcMessage {
   if (!isRecord(value)) {
-    return undefined;
+    return { kind: 'invalid', id: null };
   }
 
-  const method = value.method;
+  const { method } = value;
+  const id = parseJsonRpcId(value.id);
 
   if (typeof method !== 'string') {
-    return undefined;
+    return 'result' in value || 'error' in value
+      ? { kind: 'ignored' }
+      : { kind: 'invalid', id: id ?? null };
   }
 
-  return {
-    method,
-    id: parseJsonRpcId(value.id),
-    params: value.params,
-  };
+  if (!('id' in value) || method.startsWith('notifications/') || method === 'initialized') {
+    return { kind: 'ignored' };
+  }
+
+  return id === undefined
+    ? { kind: 'invalid', id: null }
+    : { kind: 'request', id, method, params: value.params };
+}
+
+function negotiateProtocolVersion(params: unknown): string {
+  if (!isRecord(params)) {
+    return LATEST_PROTOCOL_VERSION;
+  }
+
+  return (
+    SUPPORTED_PROTOCOL_VERSIONS.find((version) => version === params.protocolVersion) ??
+    LATEST_PROTOCOL_VERSION
+  );
 }
 
 function listTools() {
@@ -734,21 +538,24 @@ function listTools() {
     properties: {
       file: { type: 'string', description: 'TS/TSX path' },
       line: { type: 'integer', description: '1-based line' },
-      character: { type: 'integer', description: '1-based column' },
+      symbol: { type: 'string', description: 'Identifier on that line' },
+      character: { type: 'integer', description: '1-based column; omit when symbol is set' },
     },
-    required: ['file', 'line', 'character'],
+    required: ['file', 'line'],
   } as const;
+  const readOnlyAnnotations = { readOnlyHint: true, openWorldHint: false } as const;
 
   return [
     {
       name: TOOL_NAMES.definition,
-      description: 'Go to definition at file:line:character (1-based).',
+      description: 'Definition of the symbol at file:line, with its first lines.',
       inputSchema: positionSchema,
+      annotations: readOnlyAnnotations,
     },
     {
       name: TOOL_NAMES.references,
       description:
-        "Find references at file:line:character. Omits tests (unless includeTests), node_modules, git-ignored files and dist/build/out/coverage. At most 40 locations; extra hits end with a truncated count. Ends with '… omitted N in ignored paths (dirs)' when any were filtered.",
+        'References to the symbol at file:line across the workspace. Omits tests unless includeTests, node_modules, git-ignored and build output.',
       inputSchema: {
         ...positionSchema,
         properties: {
@@ -756,6 +563,7 @@ function listTools() {
           includeTests: { type: 'boolean' },
         },
       },
+      annotations: readOnlyAnnotations,
     },
   ];
 }
@@ -794,12 +602,20 @@ function toJsonRpcPayload(response: JsonRpcResponse): unknown {
 function dispatchJsonRpcMethod(method: string, id: JsonRpcId, params: unknown): JsonRpcResponse {
   switch (method) {
     case 'initialize':
-      scheduleWarmUp();
-
-      return { kind: 'result', id, result: INITIALIZE_RESULT };
+      return {
+        kind: 'result',
+        id,
+        result: {
+          protocolVersion: negotiateProtocolVersion(params),
+          capabilities: { tools: {} },
+          serverInfo: SERVER_INFO,
+        },
+      };
     case 'ping':
       return { kind: 'result', id, result: {} };
     case 'tools/list':
+      scheduleWarmUp();
+
       return { kind: 'result', id, result: { tools: listTools() } };
     case 'tools/call': {
       const toolCallParams = parseToolCallParams(params);
@@ -821,61 +637,88 @@ function dispatchJsonRpcMethod(method: string, id: JsonRpcId, params: unknown): 
 }
 
 function scheduleWarmUp(): void {
-  setTimeout(warmUpRootProject, 0);
-}
-
-function warmUpRootProject(): void {
-  const configPath = normalizePath(join(findWorkspaceRoot(), 'tsconfig.json'));
-
-  if (!ts.sys.fileExists(configPath)) {
+  if (isWarmUpScheduled) {
     return;
   }
 
+  isWarmUpScheduled = true;
+  setTimeout(runWarmUp, 0);
+}
+
+function runWarmUp(): void {
   try {
-    refreshProject(configPath);
-    getLanguageService(configPath).getProgram()?.getTypeChecker();
-  } catch {
+    warmUpRootProject(findWorkspaceRoot());
+  } catch (caught) {
     // Best effort: the first lookup reports the same error to the caller.
+    if (!(caught instanceof LookupError)) {
+      logInternalError(caught);
+    }
   }
 }
 
+function logInternalError(caught: unknown): void {
+  console.error('[file-lookup]', caught);
+}
+
 function handleJsonRpcRequest(value: unknown): JsonRpcResponse | undefined {
-  const request = parseJsonRpcRequest(value);
+  const jsonRpcMessage = parseJsonRpcMessage(value);
 
-  if (request === undefined) {
-    return undefined;
+  switch (jsonRpcMessage.kind) {
+    case 'ignored':
+      return;
+    case 'invalid':
+      return {
+        kind: 'error',
+        id: jsonRpcMessage.id,
+        error: { code: JSON_RPC_INVALID_REQUEST, message: 'Invalid Request' },
+      };
+    case 'request':
+      return respondToJsonRpcRequest(
+        jsonRpcMessage.method,
+        jsonRpcMessage.id,
+        jsonRpcMessage.params,
+      );
+    default: {
+      const exhaustiveCheck: never = jsonRpcMessage;
+
+      return exhaustiveCheck;
+    }
   }
+}
 
-  const { method, id, params } = request;
-
-  if (id === undefined || method.startsWith('notifications/') || method === 'initialized') {
-    return undefined;
-  }
-
+function respondToJsonRpcRequest(
+  method: string,
+  id: JsonRpcId,
+  params: unknown,
+): JsonRpcResponse {
   try {
     return dispatchJsonRpcMethod(method, id, params);
   } catch (caught) {
-    const message = caught instanceof Error ? caught.message : 'Tool failed';
+    if (!(caught instanceof LookupError)) {
+      logInternalError(caught);
+    }
+
+    const errorMessage = caught instanceof Error ? caught.message : 'Tool failed';
 
     if (method === 'tools/call') {
       return {
         kind: 'result',
         id,
         result: {
-          content: [{ type: 'text', text: message }],
+          content: [{ type: 'text', text: errorMessage }],
           isError: true,
         },
       };
     }
 
-    return { kind: 'error', id, error: { code: JSON_RPC_SERVER_ERROR, message } };
+    return { kind: 'error', id, error: { code: JSON_RPC_SERVER_ERROR, message: errorMessage } };
   }
 }
 
 function writeJsonRpcResponse(value: unknown, isContentLengthFramed: boolean): void {
   const response = handleJsonRpcRequest(value);
 
-  if (response === undefined) {
+  if (!response) {
     return;
   }
 
@@ -888,7 +731,7 @@ async function serveStdin(): Promise<void> {
 
   for await (const chunk of Bun.stdin.stream()) {
     buffer = Buffer.concat([buffer, chunk]);
-    const drained = drainStdinBuffer(buffer, isContentLengthSession, {
+    const drainResult = drainStdinBuffer(buffer, isContentLengthSession, {
       onInvalid: (message, isContentLengthFramed) => {
         writeJsonRpcMessage(createParseErrorPayload(message), isContentLengthFramed);
       },
@@ -896,8 +739,8 @@ async function serveStdin(): Promise<void> {
         writeJsonRpcResponse(value, isContentLengthFramed);
       },
     });
-    buffer = drained.remaining;
-    isContentLengthSession = drained.useContentLength;
+    buffer = drainResult.remaining;
+    isContentLengthSession = drainResult.isContentLengthSession;
   }
 }
 

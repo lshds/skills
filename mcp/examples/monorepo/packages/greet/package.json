@@ -1,0 +1,6 @@
+{
+  "name": "@example/greet",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts"
+}
