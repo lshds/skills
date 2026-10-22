@@ -83,8 +83,9 @@ inside only; Escape closes; the background is inert — `inert` on page content,
 never `aria-hidden` on containers with focusable descendants. On close: restore
 focus to the trigger. Prefer native `<dialog>.showModal()`, the repo’s dialog
 primitive, or an established focus-trap helper over a hand-rolled trap.
-Non-modal overlays (menus, disclosures, toasts) use `popover` + `popovertarget`
-instead of a custom dialog. See [dialogs.md](references/dialogs.md).
+Non-modal overlays use `popover` instead of a custom dialog: menus and dropdown
+panels open from a `popovertarget` button; toasts that must not light-dismiss
+use `popover="manual"`. See [dialogs.md](references/dialogs.md).
 
 ### Forms depth
 

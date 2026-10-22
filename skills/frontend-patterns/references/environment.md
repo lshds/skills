@@ -4,6 +4,9 @@ Prefer one public config object, checked when the module loads, over raw
 environment reads at call sites so a missing value fails at startup instead of
 landing in a request URL as `"undefined"`. Read every variable through that
 object, under the name the client already uses, from one source.
+`process.env.API_URL` below stands for that name and access path
+(`import.meta.env.VITE_API_URL` on Vite, `process.env.EXPO_PUBLIC_API_URL` on
+Expo).
 
 ## Required public values
 

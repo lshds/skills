@@ -83,8 +83,9 @@ export function AddToCartButton({ productId }: AddToCartButtonProps) {
 ## Request APIs stay out of client files
 
 `cookies()` and `headers()` from `next/headers` are server-only; importing them
-in a `'use client'` file fails the build. Read or change them in a Server
-Component, Server Action, or Route Handler.
+in a `'use client'` file fails the build. Read them in a Server Component,
+Server Action, or Route Handler; set or delete cookies only in a Server Action
+or Route Handler.
 
 ```tsx
 // ❌ Incorrect: a Client Component awaits cookies() — next/headers cannot run in the browser bundle

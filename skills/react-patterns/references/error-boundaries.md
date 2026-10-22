@@ -1,14 +1,16 @@
 # Error Boundaries
 
-Catch render and lifecycle errors in a child tree — not async failures or
-event-handler throws — so one broken feature doesn’t take down the whole app.
+Catch render and lifecycle errors in a child tree — not event-handler throws or
+async callbacks such as timers and promise chains in effects — so one broken
+feature doesn’t take down the whole app. Errors thrown inside a transition or
+Action, and a rejected promise read with `use()`, do reach the nearest boundary.
 
 ## Boundary shape
 
-Wrap a feature island with a safe fallback — boundaries catch render/lifecycle errors, not async or click throws.
+Wrap a feature island with a safe fallback — boundaries catch render/lifecycle errors, not click throws or async callbacks.
 
 ```tsx
-// ❌ Incorrect: wrap every tiny leaf / expect to catch async + click errors
+// ❌ Incorrect: wrap every tiny leaf / expect to catch click errors
 <FeatureErrorBoundary>
   <button onClick={() => { throw new Error('nope') }}>Click</button>
 </FeatureErrorBoundary>
@@ -69,4 +71,4 @@ Wrap a feature island at the route or panel level; `onRetry` resets UI and can r
 - Wrap route or feature islands, not every tiny component.
 - Fallback copy stays safe — no stack traces or internals to end users.
 - Use the shared boundary from the design system / app shell when one exists.
-- Async / event / domain failures are not boundary territory — handle those outside the boundary.
+- Event-handler throws, async callbacks (timers, promise chains in effects), and domain failures are not boundary territory — handle those outside the boundary.

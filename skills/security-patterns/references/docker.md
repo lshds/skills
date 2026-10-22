@@ -58,8 +58,9 @@ CMD ["bun", "dist/server.js"]
 
 - Prefer `oven/bun:1-distroless` for the runtime stage when the app does not
   need a shell — no package manager left in the image. That image’s entrypoint
-  is already `bun`, so `CMD` is the script path (`["dist/server.js"]`) and the
-  runtime user is `nonroot`.
+  is already `bun`, so `CMD` is the script path (`["dist/server.js"]`). It has
+  no `bun` user and runs as root by default, so use `--chown=nonroot:nonroot`
+  and `USER nonroot`.
 - Prefer `COPY` over `ADD`. Install with `bun install --frozen-lockfile`, then
   again with `--production` so devDependencies stay out of the runtime stage.
 - Avoid `--privileged`, docker.sock mounts, and host path mounts of `/` or

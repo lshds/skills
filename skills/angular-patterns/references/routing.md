@@ -153,10 +153,12 @@ export const unsavedChangesGuard: CanDeactivateFn<{
 ## Resolvers
 
 Use a `ResolveFn` only when the route must not activate without the data
-(missing entity fails navigation, title comes from the entity, a guard needs
-the value). Bind the result with `input()`. For in-page loading/error UI, or
-params that change while the page stays open, read `input()` from
-`httpResource` on the page — don’t subscribe in `ngOnInit`.
+(missing entity fails navigation, title comes from the entity). Bind the
+result with `input()`. A `title` resolver can’t read data resolved on its own
+route — resolve on the parent and set `title` on its `path: ''` child, which
+inherits the parent’s resolved data. For in-page loading/error UI, or params
+that change while the page stays open, read `input()` from `httpResource` on
+the page — don’t subscribe in `ngOnInit`.
 
 ```typescript
 // ❌ Incorrect: subscribe in ngOnInit (neither resolver nor httpResource)
@@ -199,7 +201,7 @@ export const userResolver: ResolveFn<User> = (routeSnapshot) => {
   const userId = routeSnapshot.paramMap.get('id')
 
   if (!userId) {
-    return inject(Router).createUrlTree(['/users'])
+    return new RedirectCommand(inject(Router).createUrlTree(['/users']))
   }
 
   return inject(UserApi).fetchUserById(userId)
@@ -207,12 +209,17 @@ export const userResolver: ResolveFn<User> = (routeSnapshot) => {
 
 {
   path: 'users/:id',
-  loadComponent: () =>
-    import('./pages/user-detail/user-detail-page').then(
-      (userDetailPage) => userDetailPage.UserDetailPage,
-    ),
   resolve: { user: userResolver },
-  title: readResolvedUserName,
+  children: [
+    {
+      path: '',
+      loadComponent: () =>
+        import('./pages/user-detail/user-detail-page').then(
+          (userDetailPage) => userDetailPage.UserDetailPage,
+        ),
+      title: readResolvedUserName,
+    },
+  ],
 }
 // Page: readonly user = input.required<User>()
 ```

@@ -91,8 +91,9 @@ protection, so a check that exists for one is easy to assume for the other.
 
 - Server Actions compare `Origin` with `Host` / `X-Forwarded-Host`
   automatically and reject mismatches. Behind a proxy or on a separate
-  public domain, list that origin in `serverActions.allowedOrigins` in
-  `next.config` instead of disabling the check.
+  public domain, list that host (`my-proxy.com`, no scheme) in
+  `experimental.serverActions.allowedOrigins` in `next.config` instead of
+  disabling the check.
 - Custom Route Handlers (`app/**/route.ts`) get no automatic check — add the
   Fetch Metadata / Origin check to every cookie-authenticated mutating
   handler.
@@ -118,7 +119,7 @@ export function isValidCsrfToken(
   if (
     !headerToken ||
     !sessionToken ||
-    headerToken.length !== sessionToken.length
+    Buffer.byteLength(headerToken) !== Buffer.byteLength(sessionToken)
   ) {
     return false
   }

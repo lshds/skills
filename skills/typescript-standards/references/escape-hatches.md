@@ -71,7 +71,7 @@ recordScore(firstScore)
 const user = rawValue as User
 const config = JSON.parse(rawJson) as Config
 
-// ✅ Correct: runtime check narrows — no cast needed
+// ✅ Correct: parse, then reject NaN — parseInt already returns a number, so there is nothing to cast
 const parsedPort = Number.parseInt(rawPort, 10)
 
 if (Number.isNaN(parsedPort)) {

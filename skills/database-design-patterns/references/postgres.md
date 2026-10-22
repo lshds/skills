@@ -79,17 +79,20 @@ CREATE TABLE invoice (
 `CHECK` also lets `NULL` pass unless the column is `NOT NULL`.
 
 ```sql
--- ❌ Incorrect: UNIQUE allows unlimited NULL phone numbers
-CREATE TABLE contact (
+-- ❌ Incorrect: top-level folders (NULL parent_id) can repeat a name
+CREATE TABLE folder (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  phone_number TEXT UNIQUE
+  parent_id BIGINT REFERENCES folder (id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  UNIQUE (parent_id, name)
 );
 
--- ✅ Correct: NULLS NOT DISTINCT allows at most one NULL
-CREATE TABLE contact (
+-- ✅ Correct: NULLS NOT DISTINCT counts NULL parents as equal, so top-level names stay unique
+CREATE TABLE folder (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  phone_number TEXT,
-  UNIQUE NULLS NOT DISTINCT (phone_number)
+  parent_id BIGINT REFERENCES folder (id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  UNIQUE NULLS NOT DISTINCT (parent_id, name)
 );
 ```
 
@@ -124,13 +127,14 @@ CREATE TABLE booking (
   during TSTZRANGE NOT NULL
 );
 
--- ✅ Correct (PostgreSQL 18+): temporal primary key rejects overlapping ranges per room
+-- ✅ Correct (PostgreSQL 18+): temporal unique constraint rejects overlapping ranges per room
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE TABLE booking (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   room_id BIGINT NOT NULL,
   during TSTZRANGE NOT NULL,
-  PRIMARY KEY (room_id, during WITHOUT OVERLAPS)
+  UNIQUE (room_id, during WITHOUT OVERLAPS)
 );
 
 -- ✅ Correct (partial rule or PostgreSQL 17 and earlier): EXCLUDE skips cancelled rows
@@ -150,9 +154,9 @@ CREATE TABLE booking (
   columns such as `room_id` by equality; enable it once per database.
 - The `WITHOUT OVERLAPS` column goes last and must be a range (or
   multirange) type.
-- When other tables reference the row by an identity `id`, keep `id` as the
-  primary key and declare `UNIQUE (room_id, during WITHOUT OVERLAPS)` — same
-  overlap guarantee.
+- Keep the identity `id` as the primary key:
+  `UNIQUE (room_id, during WITHOUT OVERLAPS)` gives the same overlap
+  guarantee as `EXCLUDE USING gist (room_id WITH =, during WITH &&)`.
 - Keep `EXCLUDE USING gist` when the rule needs a `WHERE` predicate, an
   operator other than equality plus `&&`, or the server is older than 18.
 - Prefer `[)` bounds for range types and keep that convention consistent.

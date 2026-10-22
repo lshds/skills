@@ -58,9 +58,9 @@ key stays unless the user asks to replace it.
 Version signals:
 
 - `SERIAL` / `BIGSERIAL` → `GENERATED ALWAYS AS IDENTITY` (PostgreSQL 10+)
-- application-generated time-ordered UUID workarounds → `DEFAULT uuidv7()`
-- `EXCLUDE USING gist (room_id WITH =, during WITH &&)` → `PRIMARY KEY (room_id, during WITHOUT OVERLAPS)`
-- an unindexed `GENERATED ALWAYS AS (price_cents * quantity) STORED` column → a virtual generated column
+- application-generated time-ordered UUID workarounds → `DEFAULT uuidv7()` (PostgreSQL 18+)
+- `EXCLUDE USING gist (room_id WITH =, during WITH &&)` → `UNIQUE (room_id, during WITHOUT OVERLAPS)` (PostgreSQL 18+)
+- an unindexed `GENERATED ALWAYS AS (price_cents * quantity) STORED` column → a virtual generated column (PostgreSQL 18+)
 - MySQL `utf8` (utf8mb3) → `utf8mb4` (MySQL 5.5.3+; the default since 8.0)
 
 ### Entity design & naming
@@ -77,7 +77,7 @@ tables. On append-only facts that are never updated in place, keep
 Prefer a database-generated `BIGINT` primary key that grows over time
 (1, 2, 3…) for every entity table — `BIGINT UNSIGNED` on MySQL. Keep
 natural or external IDs (email, UUID, slug) in a separate unique column —
-not as the primary key; external UUIDs are time-ordered v7 (`DEFAULT uuidv7()`).
+not as the primary key; external UUIDs are time-ordered v7 (`DEFAULT uuidv7()` on PostgreSQL 18+).
 Reserve composite primary keys for junction tables. See
 [postgres.md](references/postgres.md) or [mysql.md](references/mysql.md).
 
@@ -102,7 +102,8 @@ schema-less attributes. See [normalization.md](references/normalization.md).
 enforce invariants in the database itself, not just the application. Prefer a
 `CHECK` constraint or lookup table over an enum type for values that evolve.
 Non-overlapping ranges (bookings, validity periods) get a database constraint
-— `WITHOUT OVERLAPS`, or `EXCLUDE USING gist` when the rule is partial. See
+on PostgreSQL — `WITHOUT OVERLAPS` (18+), or `EXCLUDE USING gist` when the rule
+is partial. See
 [postgres.md](references/postgres.md) or [mysql.md](references/mysql.md).
 
 ### Soft delete

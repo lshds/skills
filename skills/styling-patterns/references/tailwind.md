@@ -205,7 +205,7 @@ that still works in forced-colors mode; reserve `outline-none` for true
 <div className="bg-[#3B82F6]" />
 
 // ✅ Correct: slash opacity, bg-linear-to-*, shrink, shadow-xs, rounded-sm, not-*, starting:
-<div className="bg-red-500/50 text-blue-600/75 bg-linear-to-r from-blue-500 shrink-0 shadow-xs rounded-sm outline-hidden not-hover:opacity-75 hover:opacity-100 starting:opacity-0 opacity-100 transition-opacity" />
+<div className="bg-red-500/50 text-blue-600/75 bg-linear-to-r from-blue-500 shrink-0 shadow-xs rounded-sm outline-hidden not-hover:opacity-75 hover:opacity-100 starting:opacity-0 opacity-100 motion-safe:transition-opacity" />
 <div className="bg-brand" />
 ```
 

@@ -124,7 +124,7 @@ Clean up during and after the run so leaked state never affects later tests.
 ```typescript
 // ❌ Incorrect: leaked mock affects later tests
 vi.spyOn(apiClient, 'get').mockResolvedValue({ items: [] })
-// no restore — next file still sees the stub
+// no restore — later tests in this file still see the stub
 
 // ✅ Correct: restore after each test; tear down shared suite resources once
 afterEach(() => {

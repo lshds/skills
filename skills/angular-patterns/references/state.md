@@ -172,7 +172,7 @@ searchResource = httpResource<SearchResult[]>(() => {
   const searchQuery = this.searchQuery()
 
   return searchQuery.length >= 2
-    ? `/api/search?q=${searchQuery}`
+    ? `/api/search?q=${encodeURIComponent(searchQuery)}`
     : undefined
 })
 
@@ -182,7 +182,9 @@ searchResults = toSignal(
     debounceTime(300),
     distinctUntilChanged(),
     switchMap((searchQuery) =>
-      this.httpClient.get<SearchResult[]>(`/api/search?q=${searchQuery}`),
+      this.httpClient
+        .get<SearchResult[]>(`/api/search?q=${encodeURIComponent(searchQuery)}`)
+        .pipe(catchError(() => of([]))),
     ),
   ),
   { initialValue: [] },

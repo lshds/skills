@@ -48,7 +48,7 @@ Version signals:
 - `baseUrl` + `paths` → `paths` relative to the tsconfig (deprecated in 6, error in 7)
 - `"moduleResolution": "node"` / `"node10"` → `"bundler"` or `"nodenext"` (deprecated in 6, error in 7)
 - `import config from './config.json' assert { type: 'json' }` → `with { type: 'json' }` (error in 7)
-- implicit global `@types` → explicit `"types": ["node"]` (TS 7 defaults to `[]`)
+- implicit global `@types` → explicit `"types": ["node"]` (TS 6 and 7 default to `[]`)
 - `ignoreDeprecations` → fix the deprecated options (they are errors in 7)
 - `.sort()` / `.reverse()` / `.splice()` on a shared array → `toSorted()` / `toReversed()` / `toSpliced()` (lib ES2023+)
 
@@ -109,8 +109,8 @@ TS 6.0 is the baseline: write a tsconfig with no deprecated options and no `igno
 | `any` / `as` / `!` to silence the checker | `unknown` + a guard, or parse at the boundary |
 | `continue` in `for` | Matching `if`, or extract + early `return` |
 | `export const` + chained `&&` for multi-step | `export function` + early returns |
-| Annotate what TypeScript already infers | Omit the noise; document purpose on exports |
-| `value === undefined` on an object, array, or token | `!value` — keep `=== undefined` for numbers, booleans, and strings where `''` is valid |
+| Annotate what TypeScript already infers | Omit the noise; document purpose on non-obvious exports |
+| `value === undefined` on an object, array, or string where `''` means missing | `!value` — keep `=== undefined` for numbers, booleans, and strings where `''` is valid |
 | `user?.name ?? ''` / `items ?? []` on non-optional types | Trust the declared type |
 | `value === null \|\| value === undefined` / `null \| undefined` inside | Convert `null` at the boundary; inside, one missing value — `undefined` unless the receiving API gives `null` a meaning |
 | `// Check if user exists` above `if (!user)` | No comment — or the reason the code can’t show |

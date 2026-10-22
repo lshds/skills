@@ -91,7 +91,7 @@ Prefer native `<select>` for a simple single choice.
   <li onclick="pick('pro')">Pro</li>
 </ul>
 
-<!-- ✅ Correct: opener + listbox/option (or use native select) -->
+<!-- ✅ Correct: opener + listbox/option; selected option tabindex 0, others -1 (or use native select) -->
 <button
   type="button"
   aria-expanded="true"
@@ -101,8 +101,8 @@ Prefer native `<select>` for a simple single choice.
   Choose plan
 </button>
 <ul id="plan-list" role="listbox" aria-label="Plan">
-  <li role="option" aria-selected="true">Pro</li>
-  <li role="option" aria-selected="false">Team</li>
+  <li role="option" aria-selected="true" tabindex="0">Pro</li>
+  <li role="option" aria-selected="false" tabindex="-1">Team</li>
 </ul>
 ```
 
@@ -121,7 +121,7 @@ Arrows move; Enter/Space activate; Escape closes and returns focus to the opener
   <li onclick="remove()">Delete</li>
 </ul>
 
-<!-- ✅ Correct: opener + menu of actions -->
+<!-- ✅ Correct: opener + menu of actions; items tabindex -1 — opening moves focus to the first item -->
 <button
   type="button"
   aria-expanded="true"
@@ -131,8 +131,8 @@ Arrows move; Enter/Space activate; Escape closes and returns focus to the opener
   More
 </button>
 <div id="more-menu" role="menu" aria-label="More">
-  <button type="button" role="menuitem">Rename</button>
-  <button type="button" role="menuitem">Delete</button>
+  <button type="button" role="menuitem" tabindex="-1">Rename</button>
+  <button type="button" role="menuitem" tabindex="-1">Delete</button>
 </div>
 ```
 
@@ -182,7 +182,7 @@ use assertive/`role="alert"` only for urgent errors.
 <!-- ❌ Incorrect: status text with no live region — AT may miss updates -->
 <div class="toast">Saved</div>
 
-<!-- ✅ Correct: polite status; assertive only for urgent errors -->
+<!-- ✅ Correct: polite status region is in the page before the update — only its text changes; assertive only for urgent errors -->
 <div role="status" aria-live="polite" aria-atomic="true">Saved</div>
 <div role="alert">Payment failed — check your card</div>
 ```

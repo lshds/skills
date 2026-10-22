@@ -13,7 +13,7 @@ SDK 56+). Confirm props against the installed package’s `.d.ts`.
 // ❌ Incorrect: platform SwiftUI in a shared file / missing Host
 import { Button } from '@expo/ui/swift-ui'
 
-return <Button onPress={handleSave}>Save</Button>
+return <Button label="Save" onPress={handleSave} />
 
 // ✅ Correct: Host + universal components from @expo/ui
 import { Host, Column, Button, Text } from '@expo/ui'
@@ -22,7 +22,7 @@ return (
   <Host matchContents>
     <Column>
       <Text>Hello</Text>
-      <Button onPress={handleSave}>Save</Button>
+      <Button label="Save" onPress={handleSave} />
     </Column>
   </Host>
 )

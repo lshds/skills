@@ -349,8 +349,9 @@ export function Row() {
 ## Composition
 
 Use static class strings. NativeWind compiles classes to React Native
-`StyleSheet` objects at build time — dynamic interpolation forces runtime style
-resolution and hurts performance. Prefer complete utilities. Use the repo’s
+`StyleSheet` objects at build time, and Tailwind only generates class names it
+finds complete in source — an interpolated class isn’t generated, so no style
+applies. Prefer complete utilities. Use the repo’s
 `cn` / clsx when present — don’t invent `clsx` + `tailwind-merge` mid-feature;
 `cn` does not fix partial strings. Use a style object when the value is dynamic
 or the API expects a style prop.
@@ -362,7 +363,7 @@ interface BoxProps {
   isPrimary: boolean
 }
 
-// ❌ Incorrect: dynamic interpolation — resolved at runtime
+// ❌ Incorrect: dynamic interpolation — Tailwind never sees the full class name
 export function Box({ isPrimary }: BoxProps) {
   return <View className={`p-4 bg-${isPrimary ? 'primary' : 'danger'}`} />
 }
@@ -448,7 +449,7 @@ accepts an RC; never propose moving a v4 app to v5 while it is pre-release.
   `jsxImportSource`, no `tailwind.config.js`; PostCSS runs `@tailwindcss/postcss`.
 - Tokens live in CSS `@theme`; use `@config` only when the repo already has an
   advanced JS config.
-- Register third-party components with `styled()` from `nativewind`;
-  `cssInterop` / `remapProps` are deprecated in v5.
+- Wrap third-party components with `styled()` from `nativewind` and render the
+  returned component; the v5 RC doesn’t export `cssInterop` / `remapProps`.
 - The TypeScript ambient file references `react-native-css/types` instead of
   `nativewind/types`.

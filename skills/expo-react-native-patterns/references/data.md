@@ -29,7 +29,7 @@ const currentUser: unknown = await response.json()
 - Prefer `fetch` (or `expo/fetch` for streaming) unless the repo already
   standardizes on another client.
 - Only `EXPO_PUBLIC_*` vars ship to the client — never put write-capable secrets
-  there. Restart the bundler after `.env` changes.
+  there. After `.env` changes, do a full app reload (no bundler restart needed).
 - For cacheable remote data, use the repo’s query lib — don’t hand-roll
   fetch-in-`useEffect` when that stack exists.
 
@@ -73,7 +73,13 @@ useEffect(() => {
   const abortController = new AbortController()
 
   fetch(profileUrl, { signal: abortController.signal })
-    .then((response) => response.json())
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      return response.json()
+    })
     .then(setProfile)
     .catch((error) => {
       if (!abortController.signal.aborted) {

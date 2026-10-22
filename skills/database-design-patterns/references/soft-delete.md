@@ -40,7 +40,7 @@ CREATE TABLE account (
 
 -- ✅ Correct (PostgreSQL): partial unique index on non-deleted rows only
 CREATE TABLE account (
-  id BIGINT PRIMARY KEY,
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   email TEXT NOT NULL,
   deleted_at TIMESTAMPTZ
 );

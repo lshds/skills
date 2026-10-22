@@ -77,7 +77,7 @@ routes from co-located UI/helpers). Thin routes → `screens/` for new or
 touched routes only — no mass extraction in brownfield. Flat role folders
 beside routes: `components/`, `configs/`, `services/`, `lib/` / `utils/`,
 plus `server/` for `app/api/` `+api` helpers. Greenfield may use `src/` +
-`@/*` / `~/*` aliases — don’t reshuffle an existing app to match. See
+the template’s `@/*` alias — don’t reshuffle an existing app to match. See
 [structure.md](references/structure.md).
 
 ### Navigation

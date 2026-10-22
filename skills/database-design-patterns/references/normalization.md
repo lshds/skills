@@ -52,7 +52,7 @@ CREATE TABLE supplier (
 
 CREATE TABLE order_line (
   order_id BIGINT NOT NULL,
-  supplier_id BIGINT NOT NULL REFERENCES supplier (id),
+  supplier_id BIGINT NOT NULL REFERENCES supplier (id) ON DELETE RESTRICT,
   quantity INT NOT NULL,
   PRIMARY KEY (order_id, supplier_id)
 );
@@ -111,7 +111,7 @@ CREATE TABLE product (
   id BIGINT PRIMARY KEY,
   price NUMERIC NOT NULL,
   in_stock BOOLEAN NOT NULL,
-  extra_attributes TEXT
+  extra_attributes JSONB
 );
 ```
 

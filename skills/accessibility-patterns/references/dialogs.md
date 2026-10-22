@@ -2,7 +2,7 @@
 
 Prefer the platform `<dialog>` with `showModal()` or the repo’s dialog primitive
 over a hand-built overlay so focus moves in, the background goes inert, and
-Escape closes without custom code. Non-modal overlays (menus, disclosures,
+Escape closes without custom code. Non-modal overlays (menus, dropdown panels,
 toasts) use `popover` instead of dialog machinery. Build a custom
 `role="dialog"` only when neither fits.
 
@@ -116,7 +116,7 @@ nothing breaks where it is missing.
 
 ## Non-modal overlays use popover
 
-Menus, disclosures, and toasts don’t block the page, so modal dialog machinery
+Menus, dropdown panels, and toasts don’t block the page, so modal dialog machinery
 (focus trap, `aria-modal`, inert background) is wrong for them. `popover` with
 a `popovertarget` button gives top-layer rendering, Escape, and light dismiss
 with no script.

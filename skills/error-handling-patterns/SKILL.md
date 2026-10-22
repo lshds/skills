@@ -50,11 +50,12 @@ type; don’t invent a new one.
 - **Design:** a short list the team can implement. Cover the points that apply;
   skip the rest: **Kinds**, **Throw vs return**, **At the edge**, **Client vs
   log**, **Retry**, **Async**
-- **Review:** same headings; report only problems — generic `Error`, throw for a
-  routine miss, `kind` or `cause` in JSON, `statusCode` as a JSON field unless
-  this API already returns it, leak in `message`, retry of a non-idempotent
-  write or one that ignores the caller's cancellation, fire-and-forget or a
-  batch that hides failed items, a resource leaked when a step throws
+- **Review:** same headings; report only problems — generic `Error` when the
+  repo has an app error class, throw for a routine miss, `kind` or `cause` in
+  JSON, `statusCode` as a JSON field unless this API already returns it, leak
+  in `message`, retry of a non-idempotent write or one that ignores the
+  caller's cancellation, fire-and-forget or a batch that hides failed items, a
+  resource leaked when a step throws
 
 ### Throw vs return
 
@@ -120,7 +121,7 @@ See [logging.md](references/logging.md).
 
 ### Upstream, retries, resilience
 
-Retry only transient, idempotent work (or writes with an idempotency key). Fail fast on `validation`, `unauthenticated`, `not_found`, `conflict`. Upstream failures become your own `unavailable` error, not the vendor body. Pass the caller's cancellation through, give each attempt its own timeout, and stop retrying once the caller aborted.
+Retry only transient, idempotent work (or writes with an idempotency key). Fail fast on `malformed`, `validation`, `unauthenticated`, `forbidden`, `not_found`, `conflict`. Upstream failures become your own `unavailable` error, not the vendor body. Pass the caller's cancellation through, give each attempt its own timeout, and stop retrying once the caller aborted.
 
 Prefer a defined fallback over a hard internal failure when the product allows it — and always log that you degraded. Open a circuit when retries against an already-failing dependency would cascade.
 

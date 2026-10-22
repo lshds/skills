@@ -57,15 +57,28 @@ setItems((currentItems) => [...currentItems, newItem])
 Use when several components share complex client state. Keep server/remote data in the repo’s data layer, not duplicated here.
 
 ```tsx
-// ❌ Incorrect: prop-drill shared UI state through unrelated parents
+// ❌ Incorrect: prop-drill shared UI state through a parent that never reads it
+interface WorkspaceProps {
+  selectedId?: string
+  onSelect: (selectedId: string) => void
+}
+
+function Workspace({ selectedId, onSelect }: WorkspaceProps) {
+  return (
+    <>
+      <Sidebar selectedId={selectedId} onSelect={onSelect} />
+      <Panel selectedId={selectedId} />
+    </>
+  )
+}
+
 export function App() {
   const [selectedId, setSelectedId] = useState<string>()
 
   return (
     <>
       <Toolbar selectedId={selectedId} onSelect={setSelectedId} />
-      <Sidebar selectedId={selectedId} onSelect={setSelectedId} />
-      <Panel selectedId={selectedId} />
+      <Workspace selectedId={selectedId} onSelect={setSelectedId} />
     </>
   )
 }

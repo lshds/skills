@@ -21,8 +21,10 @@ test('should reject every invalid email shape', async ({ page }) => {
 
 // ✅ Correct: one critical journey — user can complete signup
 test('should complete signup and land on the dashboard', async ({ page }) => {
+  const testUserEmail = `e2e-user-${crypto.randomUUID()}@example.com`
+
   await page.goto('/signup')
-  await page.getByLabel('Email').fill('user@example.com')
+  await page.getByLabel('Email').fill(testUserEmail)
   await page.getByLabel('Password').fill('SecurePass123!')
   await page.getByRole('button', { name: 'Create account' }).click()
 

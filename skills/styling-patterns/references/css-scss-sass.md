@@ -220,7 +220,8 @@ Intentional hierarchy, not noise. Gate decorative animation with
 A dialog or popover goes from `display: none` to shown in one frame, so a plain
 `transition` never runs and the overlay pops in. `@starting-style` supplies the
 first frame’s values, and `transition-behavior: allow-discrete` keeps `display`
-from flipping before the exit fade ends. Gate it like any decorative motion.
+and `overlay` (top-layer rendering) from flipping before the exit fade ends.
+Gate it like any decorative motion.
 
 ```css
 /* ❌ Incorrect: transition from display: none never runs — the dialog pops in; motion ungated */
@@ -233,7 +234,7 @@ dialog[open] {
   opacity: 1;
 }
 
-/* ✅ Correct: @starting-style sets the entry frame; allow-discrete animates display; reduced motion skips it */
+/* ✅ Correct: @starting-style sets the entry frame; allow-discrete animates display and overlay; reduced motion skips it */
 dialog,
 [popover] {
   opacity: 0;
@@ -251,7 +252,7 @@ dialog[open],
 @media (prefers-reduced-motion: no-preference) {
   dialog,
   [popover] {
-    transition-property: opacity, display;
+    transition-property: opacity, display, overlay;
     transition-duration: 0.2s;
     transition-behavior: allow-discrete;
   }
@@ -329,7 +330,7 @@ and related media or container queries — not deep element trees.
 }
 
 .list li:not(:last-child) {
-  border-bottom: 1px solid #c0c0c0;
+  border-bottom: 1px solid var(--color-border);
 }
 
 label:has(:checked) {

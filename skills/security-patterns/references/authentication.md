@@ -196,9 +196,10 @@ Linking.addEventListener('url', ({ url }) => {
 const ALLOWED_DEEP_LINK_PATHS = new Set(['auth/callback', 'invite/accept'])
 
 Linking.addEventListener('url', ({ url }) => {
-  const { path, queryParams } = Linking.parse(url)
+  const { hostname, path, queryParams } = Linking.parse(url)
+  const route = [hostname, path].filter(Boolean).join('/')
 
-  if (!path || !ALLOWED_DEEP_LINK_PATHS.has(path)) {
+  if (!ALLOWED_DEEP_LINK_PATHS.has(route)) {
     return
   }
 
@@ -237,5 +238,5 @@ response.setHeader(
   shadow it. Supported by all current browsers.
 - `HttpOnly` — not readable by page scripts.
 - `Secure` — HTTPS only.
-- `SameSite=Lax` — the default; `Strict` when cross-site navigation never
-  needs the session.
+- `SameSite=Lax` — set it explicitly (not every browser defaults to `Lax`);
+  `Strict` when cross-site navigation never needs the session.

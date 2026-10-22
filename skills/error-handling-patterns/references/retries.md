@@ -14,7 +14,9 @@ export async function chargeOrder(orderId: string): Promise<Payment> {
 
 // ✅ Correct: retry only with an idempotency key
 export async function chargeOrder(orderId: string): Promise<Payment> {
-  return createPayment(orderId, { idempotencyKey: orderId })
+  return retryOperation(() =>
+    createPayment(orderId, { idempotencyKey: orderId }),
+  )
 }
 ```
 
@@ -73,7 +75,7 @@ export async function fetchExchangeRates(
         AbortSignal.any([signal, AbortSignal.timeout(ATTEMPT_TIMEOUT_MS)]),
       )
     } catch (error) {
-      if (signal.aborted) {
+      if (signal.aborted || !isRetryable(error)) {
         throw error
       }
 

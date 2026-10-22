@@ -1,10 +1,10 @@
 # Redoc
 
-Prefer the casing Redoc uses on that surface — kebab-case on the HTML element, camelCase in `Redoc.init` and `redocly.yaml` — and one place to set the options, so the docs page matches what you set.
+Prefer the casing Redoc uses on that surface — kebab-case on the HTML element, camelCase in `init` and `redocly.yaml` — and one place to set the options, so the docs page matches what you set.
 
 ## Option names
 
-The HTML `<redoc>` tag reads kebab-case attributes. `Redoc.init` and `redocly.yaml` read camelCase keys. The other casing on that surface is ignored, so you debug a default you did not pick.
+The HTML `<redoc>` tag reads kebab-case attributes. `init` and `redocly.yaml` read camelCase keys. The other casing on that surface is ignored, so you debug a default you did not pick.
 
 ```html
 <!-- ❌ Incorrect: camelCase attributes on the HTML element are ignored -->
@@ -20,9 +20,14 @@ The HTML `<redoc>` tag reads kebab-case attributes. `Redoc.init` and `redocly.ya
   scroll-y-offset="64"
   hide-download-buttons="true"
 ></redoc>
+<script type="module" src="https://cdn.redoc.ly/redoc/v3.x/bundles/redoc.standalone.js"></script>
 ```
 
-```typescript
+```html
+<div id="redoc"></div>
+<script type="module">
+import { init } from 'https://cdn.redoc.ly/redoc/v3.x/bundles/redoc.standalone.js'
+
 const redocContainer = document.getElementById('redoc')
 
 if (!redocContainer) {
@@ -30,7 +35,7 @@ if (!redocContainer) {
 }
 
 // ❌ Incorrect: kebab-case keys in the init object
-Redoc.init(
+init(
   '/openapi.json',
   {
     'scroll-y-offset': 64,
@@ -40,7 +45,7 @@ Redoc.init(
 )
 
 // ✅ Correct: camelCase keys in the init object
-Redoc.init(
+init(
   '/openapi.json',
   {
     scrollYOffset: 64,
@@ -48,6 +53,7 @@ Redoc.init(
   },
   redocContainer,
 )
+</script>
 ```
 
 ```yaml
@@ -63,11 +69,12 @@ openapi:
 ```
 
 - HTML element: kebab-case (`spec-url`, `scroll-y-offset`, `hide-download-buttons`).
-- `Redoc.init` and `redocly.yaml`: camelCase (`scrollYOffset`, `hideDownloadButtons`).
-- The download option is plural, `hideDownloadButtons`; the singular `hideDownloadButton` is the deprecated name. It only hides the button — it is not access control, and anyone can still fetch the spec URL.
-- Set options in `redocly.yaml` or in `Redoc.init`, not both with different values.
+- `init` and `redocly.yaml`: camelCase (`scrollYOffset`, `hideDownloadButtons`).
+- A repo still on Redoc CE 2.x keeps its classic `<script>` tag and the global `Redoc.init`.
+- The download option is plural, `hideDownloadButtons`; the singular `hideDownloadButton` is the deprecated 2.x name that Redoc CE 3.x no longer reads. It only hides the button — it is not access control, and anyone can still fetch the spec URL.
+- Set options in `redocly.yaml` or in `init`, not both with different values.
 - Set only the options you need. Do not paste a full theme. Keep the file the repo already has.
-- Do not add Redoc if the repo has no docs page yet, or if Scalar is already that page.
+- Do not add Redoc if the repo has no docs page yet (unless the user asked or confirmed), or if Scalar is already that page.
 
 ## Tags and groups
 

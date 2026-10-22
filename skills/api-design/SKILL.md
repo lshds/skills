@@ -113,10 +113,11 @@ JSON:API-inspired subset: `data` / `type` / `id` / `attributes` / `errors` /
 content types. One contract for writes, success, and errors
 (`Content-Type: application/json`). POST omits `id`; PATCH sends `id` plus
 changed attributes; PUT sends `id` plus the full set. Never both `data` and
-`errors`. The main alternative a repo may already use is RFC 9457 problem
-details (`application/problem+json` with `type` / `title` / `status` / `detail` /
-`instance`); when it does, keep that shape instead of adding `errors[]`. Worked
-envelopes: [http-contract.md](references/http-contract.md).
+`errors` in a single-resource response. The main alternative a repo may
+already use is RFC 9457 problem details (`application/problem+json` with
+`type` / `title` / `status` / `detail` / `instance`); when it does, keep that
+shape instead of adding `errors[]`. Worked envelopes:
+[http-contract.md](references/http-contract.md).
 
 ### Pagination & query
 

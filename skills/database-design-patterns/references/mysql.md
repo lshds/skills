@@ -26,7 +26,7 @@ CREATE TABLE user (
 ```
 
 - Default to `BIGINT UNSIGNED AUTO_INCREMENT` for the primary key — `INT`
-  exhausts at roughly 4.3 billion rows.
+  exhausts at roughly 2.1 billion rows (4.3 billion unsigned).
 - If an external, opaque identifier is required, store it as `BINARY(16)` in
   a secondary unique column, generated as a time-ordered UUID (UUIDv7)
   rather than random UUIDv4, to keep secondary-index locality reasonable.
@@ -112,9 +112,9 @@ ALTER TABLE event
   ADD INDEX event_event_type_idx (event_type);
 ```
 
-- Use `->>` (unquoted extraction) in comparisons — the plain
-  `->` / `JSON_EXTRACT` form returns a quoted JSON value and won't match a
-  bare string.
+- Use `->>` (unquoted extraction) in the generated column — the plain
+  `->` / `JSON_EXTRACT` form keeps the JSON quotes in the stored value, so
+  index lookups won't match a bare string.
 - Reserve `JSON` for genuinely schema-less or rarely queried data; promote
   any path that's filtered or joined on regularly to a real generated
   column.

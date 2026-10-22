@@ -134,7 +134,7 @@ app.patch('/api/users/:id', requireAuth, async (request, response) => {
     data: userUpdate,
   })
 
-  response.json(user)
+  response.json({ id: user.id, displayName: user.displayName })
 })
 ```
 

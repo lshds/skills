@@ -89,7 +89,8 @@ export function TicketTabs() {
 
 - Hidden content keeps its state and DOM, but its Effects are cleaned up while
   hidden and re-created when it becomes visible again — timers, subscriptions,
-  and media stop while hidden, so every Effect needs a correct cleanup.
+  and media stop while hidden only if an Effect cleanup stops them, so every
+  Effect needs a correct cleanup.
 - Updates inside hidden content run at low priority, so a hidden panel doesn’t
   slow down the visible one.
 - Unmount instead when the panel should reset each time it closes, or when
@@ -287,7 +288,7 @@ return <button onClick={handleShare}>Share</button>
 
 ## Transitions for non-urgent updates
 
-Mark frequent / expensive updates that must not block input as transitions. Keep urgent state (typed text) outside the transition.
+Mark frequent / expensive updates that must not block input as transitions. Keep urgent state (typed text) outside the transition. `startTransition` runs its callback immediately, so work computed inside it still blocks the keystroke — put only the state update in the transition and let the render that reads it do the heavy work.
 
 ```tsx
 // ❌ Incorrect: expensive filter blocks typing
@@ -296,16 +297,16 @@ const handleChange = (nextSearchQuery: string) => {
   setSearchResults(filterAll(nextSearchQuery))
 }
 
-// ✅ Correct: urgent input + transition for heavy work
+// ✅ Correct: urgent input; only the results query updates in a transition, and ResultsList filters while rendering
 const [isPending, startTransition] = useTransition()
 const [searchQuery, setSearchQuery] = useState('')
-const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+const [resultsQuery, setResultsQuery] = useState('')
 
 const handleChange = (nextSearchQuery: string) => {
   setSearchQuery(nextSearchQuery)
 
   startTransition(() => {
-    setSearchResults(filterAll(nextSearchQuery))
+    setResultsQuery(nextSearchQuery)
   })
 }
 
@@ -316,10 +317,12 @@ return (
       value={searchQuery}
       onChange={(event) => handleChange(event.target.value)}
     />
-    <ResultsList results={searchResults} />
+    <ResultsList query={resultsQuery} />
   </>
 )
 ```
+
+`ResultsList` runs `filterAll(query)` during its render. React Compiler lets the urgent render skip it while `resultsQuery` is unchanged; without the compiler, wrap `ResultsList` in `memo` or every keystroke still runs the filter.
 
 High-frequency listeners (scroll, pointer) that only drive secondary UI: wrap the setState in `startTransition` (or skip state and use a ref — see above).
 

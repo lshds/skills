@@ -87,8 +87,8 @@ test('should open settings', async ({ page }) => {
   await page.goto('/settings')
 })
 
-// ✅ Correct: auth.setup.ts logs in once and writes storageState
-import { test as setup } from '@playwright/test'
+// ✅ Correct: auth.setup.ts logs in once, waits for the signed-in page, then writes storageState
+import { expect, test as setup } from '@playwright/test'
 
 const AUTH_STORAGE_STATE_PATH = 'playwright/.auth/user.json'
 
@@ -104,6 +104,7 @@ setup('authenticate', async ({ page }) => {
   await page.getByLabel('Email').fill(e2eUserEmail)
   await page.getByLabel('Password').fill(e2eUserPassword)
   await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
   await page.context().storageState({ path: AUTH_STORAGE_STATE_PATH })
 })
 ```

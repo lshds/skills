@@ -55,8 +55,8 @@ import { SettingsForm } from '@/components/SettingsForm'
 - Supported: `.ios`, `.android`, `.native`, `.web`.
 - Props must be identical across variants; always keep a non-suffixed default
   (even a no-op).
-- Expo Router route files don’t support platform extensions — put splits in
-  `components/` / `screens/`.
+- Expo Router route files take platform extensions only beside a non-suffixed
+  route — keep splits in `components/` / `screens/`.
 - Colocate `StyleSheet.create` at the bottom of the file when the repo uses it.
 - Colocate tests: `formatDate.test.ts` next to `formatDate.ts`.
 

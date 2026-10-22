@@ -81,7 +81,11 @@ it('should emit after debounce', async () => {
   expect(handleSearch).toHaveBeenCalledWith(searchQuery)
 })
 
-// ✅ Correct: fake timers — advance to the debounce boundary
+// ✅ Correct: fake timers — advance to the debounce boundary; restore real timers after each test
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 it('should emit after debounce', () => {
   vi.useFakeTimers()
 
@@ -93,7 +97,5 @@ it('should emit after debounce', () => {
   vi.advanceTimersByTime(DEBOUNCE_MS)
 
   expect(handleSearch).toHaveBeenCalledWith(searchQuery)
-
-  vi.useRealTimers()
 })
 ```

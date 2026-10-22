@@ -9,7 +9,7 @@ invalidate the tag the read path caches with.
 ## Session and authorization inside the action
 
 Every exported `'use server'` function is a public endpoint, and layouts and
-proxy do not run for every call. Read the session, then scope the write to the
+proxy do not gate every call. Read the session, then scope the write to the
 session owner so another user's id changes nothing.
 
 ```typescript

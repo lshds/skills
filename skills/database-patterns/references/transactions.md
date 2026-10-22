@@ -131,8 +131,8 @@ export async function chargeOrder(
 
 ## Isolation defaults
 
-Prefer the engine default (`READ COMMITTED` on PostgreSQL and MySQL) unless
-you have a measured anomaly that needs a stronger level.
+Prefer the engine default (`READ COMMITTED` on PostgreSQL, `REPEATABLE READ`
+on MySQL InnoDB) unless you have a measured anomaly that needs a stronger level.
 
 ```typescript
 // ❌ Incorrect: serializable on every request “just in case”
@@ -255,7 +255,7 @@ export async function debitAccount(
   })
 }
 
-// ✅ Correct: Drizzle — throw to abort the unit
+// ✅ Correct: Drizzle — for('update') locks the row; throw to abort the unit
 export async function debitAccount(
   fromAccountId: number,
   transferAmount: number,
@@ -265,6 +265,7 @@ export async function debitAccount(
       .select({ id: account.id, balance: account.balance })
       .from(account)
       .where(eq(account.id, fromAccountId))
+      .for('update')
 
     if (!sourceAccount) {
       throw new Error(`account ${fromAccountId} not found`)
@@ -283,24 +284,21 @@ export async function debitAccount(
 ```
 
 ```typescript
-// ✅ Correct: Prisma — interactive transaction; throw to abort
+// ✅ Correct: Prisma — decrement first; the UPDATE locks the row until commit,
+// so each debit checks the balance the previous one left; throw to roll back
 export async function debitAccount(
   fromAccountId: number,
   transferAmount: number,
 ): Promise<void> {
   await prisma.$transaction(async (transaction) => {
-    const sourceAccount = await transaction.account.findUniqueOrThrow({
-      where: { id: fromAccountId },
-    })
-
-    if (sourceAccount.balance < transferAmount) {
-      throw new Error('insufficient funds')
-    }
-
-    await transaction.account.update({
+    const sourceAccount = await transaction.account.update({
       where: { id: fromAccountId },
       data: { balance: { decrement: transferAmount } },
     })
+
+    if (sourceAccount.balance < 0) {
+      throw new Error('insufficient funds')
+    }
   })
 }
 ```

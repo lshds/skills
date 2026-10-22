@@ -57,7 +57,7 @@ aliases from whatever manifests the repo actually uses.
   `packages/`, or equivalent)
 - Workspace config: npm / yarn / bun (`package.json` `workspaces`), pnpm
   (`pnpm-workspace.yaml`), Cargo workspace, Go workspace / multi-module,
-  Poetry / uv workspace, Bazel / Nx / Pants, or similar
+  uv workspace, Bazel / Nx / Pants, or similar
 - Top-level task runner for many packages (`turbo.json`, root `Makefile`, and
   the like)
 
@@ -102,7 +102,8 @@ repo’s names and source root when they already differ.
 
 **Done when (place):**
 
-- [ ] Target path uses an existing package or role folder
+- [ ] Target path uses an existing package or role folder, or a new
+  one-purpose `packages/*` package for code a second app needs
 - [ ] One-line rationale; blueprint file only when asked
 
 **Done when (blueprint):**

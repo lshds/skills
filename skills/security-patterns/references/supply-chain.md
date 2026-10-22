@@ -2,9 +2,8 @@
 
 Install CI and production from the committed lockfile. Treat lifecycle
 scripts as code execution only when this repo’s package manager will run them.
-If anything is uncertain, always ask — do not guess. Which package manager to
-use and asking before adding a dependency are general dependency rules, not
-repeated here.
+If anything is uncertain, always ask — do not guess. Use the package manager
+the lockfile names, and ask before adding a dependency.
 
 ## Lockfile integrity
 
@@ -47,7 +46,7 @@ yarn npm audit
 
 ## Postinstall / lifecycle scripts
 
-Ask whether this manager will actually run the script. npm, pnpm, Bun, and Yarn block dependency `preinstall` / `install` / `postinstall` (and npm’s implicit `node-gyp`) unless the package is granted: `allowScripts`, `allowBuilds`, `trustedDependencies`, or Yarn `enableScripts` / `dependenciesMeta.*.built`. Omitting Bun `trustedDependencies` still runs Bun’s default allowlist; setting the array replaces it. Those lists are the execution grant. A remote download-and-exec is a confirmed sink only if it will run.
+Ask whether this manager will actually run the script. npm 12+, pnpm 10+, Bun, and Yarn 4.14+ block dependency `preinstall` / `install` / `postinstall` (and npm’s implicit `node-gyp`) unless the package is granted: `allowScripts`, `allowBuilds`, `trustedDependencies`, or Yarn `enableScripts` / `dependenciesMeta.*.built`. Omitting Bun `trustedDependencies` still runs Bun’s default allowlist; setting the array replaces it. Those lists are the execution grant. A remote download-and-exec is a confirmed sink only if it will run.
 
 ```json
 // ❌ Incorrect: dependency postinstall downloads and executes a remote script
@@ -121,7 +120,7 @@ allowBuilds:
 }
 ```
 
-- Do not flag a dependency `postinstall` as executing unless this manager will run it: `allowScripts` (npm), `allowBuilds` (pnpm), default allowlist or `trustedDependencies` (Bun), `enableScripts` / `dependenciesMeta.*.built` (Yarn).
+- Do not flag a dependency `postinstall` as executing unless this manager will run it: `allowScripts` (npm 12+), `allowBuilds` (pnpm), default allowlist or `trustedDependencies` (Bun), `enableScripts` / `dependenciesMeta.*.built` (Yarn 4.14+).
 - Before adding a package or granting trust, read its `scripts` and the scripts of new lockfile entries. Do not grant trust if a script downloads and runs a remote file.
 - The manager writes the grant list: `npm approve-scripts` → `allowScripts`; `pnpm approve-builds` → `allowBuilds`; `bun pm trust` → `trustedDependencies`; Yarn: set `dependenciesMeta.*.built` (no approve CLI). Always ask before granting trust or committing that file.
 - Setting Bun `trustedDependencies` replaces the default allowlist — keep any default packages this app still needs (`esbuild`, `sharp`). Omitting the key leaves the default list in effect.
@@ -130,7 +129,7 @@ allowBuilds:
 npm view helpful-utils scripts
 pnpm view helpful-utils scripts
 bun info helpful-utils scripts
-yarn npm info helpful-utils scripts
+yarn npm info helpful-utils --fields scripts
 ```
 
 ## Harden installs and publishing against worms
@@ -142,7 +141,7 @@ does most of its damage in the hours after it is published, before it is
 reported and pulled.
 
 ```yaml
-# ❌ Incorrect: pnpm-workspace.yaml with no release-age delay (default 0)
+# ❌ Incorrect: pnpm-workspace.yaml with no release-age delay (default 0 before pnpm 11, 1440 since)
 minimumReleaseAge: 0
 
 # ✅ Correct: wait one day (value in minutes; pnpm 10.16+) before installing a brand-new version

@@ -115,6 +115,7 @@ Shell strings and `shell: true` pass user input to `/bin/sh`, enabling arbitrary
 
 ```typescript
 import { exec, spawn } from 'node:child_process'
+import path from 'node:path'
 
 // ❌ Incorrect: command injection via shell string
 exec(`convert ${request.body.filename} out.png`)
@@ -122,10 +123,19 @@ exec(`convert ${request.body.filename} out.png`)
 // ❌ Incorrect: shell: true + user input in command string
 spawn(`echo ${request.query.message}`, { shell: true })
 
-// ❌ Incorrect: Bun shell interpolates into a shell — treat like exec
+// ❌ Incorrect: Bun.$ escapes strings, but a JSON { raw } value skips escaping and -flags still pass
 await Bun.$`convert ${request.body.filename} out.png`
 
-// ✅ Correct: fixed argv array; no shell (Node or Bun)
+// ✅ Correct: filename checked under a fixed root; fixed argv array; no shell (Node or Bun)
+const UPLOAD_ROOT = path.resolve('/var/uploads')
+const fileName = request.body.filename
+const validatedPath = path.resolve(UPLOAD_ROOT, String(fileName))
+const isInsideRoot = validatedPath.startsWith(UPLOAD_ROOT + path.sep)
+
+if (typeof fileName !== 'string' || fileName.startsWith('-') || !isInsideRoot) {
+  throw new Error('filename not allowed')
+}
+
 spawn('convert', [validatedPath, 'out.png'], { shell: false })
 Bun.spawn(['convert', validatedPath, 'out.png'])
 ```

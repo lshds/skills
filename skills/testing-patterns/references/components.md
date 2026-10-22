@@ -94,8 +94,8 @@ it('should search for the typed query', async () => {
 ## Skip manual act
 
 Testing Library already wraps `render` and user-event interactions in `act`, so
-extra wrapping only adds noise. On React 19, `act` comes from `react` —
-`react-dom/test-utils` no longer exports it.
+extra wrapping only adds noise. On React 19, `act` comes from `react` — the
+`react-dom/test-utils` export is deprecated and logs a warning.
 
 ```tsx
 import { render, screen } from '@testing-library/react'
@@ -105,7 +105,7 @@ import { expect, it } from 'vitest'
 
 import { Counter } from './Counter'
 
-// ❌ Incorrect: act from react-dom/test-utils (gone in React 19) around calls that are already wrapped
+// ❌ Incorrect: act from react-dom/test-utils (deprecated in React 19) around calls that are already wrapped
 it('should increase the count', async () => {
   const user = userEvent.setup()
 

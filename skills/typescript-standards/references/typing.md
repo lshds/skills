@@ -13,11 +13,16 @@ processUser(parsedPayload)
 
 // ✅ Correct: unknown + type predicate
 function isUser(value: unknown): value is User {
-  if (typeof value !== 'object' || value === null || !('id' in value)) {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('id' in value) ||
+    !('email' in value)
+  ) {
     return false
   }
 
-  return typeof value.id === 'string'
+  return typeof value.id === 'string' && typeof value.email === 'string'
 }
 
 const parsedPayload: unknown = JSON.parse(rawPayload)

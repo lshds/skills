@@ -67,7 +67,7 @@ app.post('/api/upload', async (request, response) => {
   response.sendStatus(201)
 })
 
-// ✅ Correct: enforce size + allowlisted MIME; random storage name
+// ✅ Correct: enforce size + declared-MIME allowlist (not proof of file type); random storage name
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png'])
 

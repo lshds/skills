@@ -1,21 +1,43 @@
 # DOM Clobbering
 
-Prefer `window.location` / `window.document` over bare `document` lookups.
-Named elements in untrusted HTML can replace `document.location` with a form.
+Prefer module-scoped config and type-checked DOM lookups over undeclared
+globals and named `document` properties. In untrusted HTML, an element’s `id`
+fills any `window` global the page never defined, and `name` on `form`, `img`,
+`embed`, `object`, or `iframe` overrides `document` properties such as
+`document.cookie`.
 
-## Window APIs
+## Globals and named properties
 
-A `<form id="location">` makes `document.location` a form, so an origin check on
-`.href` is attacker-controlled.
+A global the page never defined resolves to the element with that `id`. Two
+`<a id="appConfig">` tags, the second with `name="cdnUrl"` and an attacker
+`href`, make `window.appConfig.cdnUrl` stringify to the attacker URL.
 
 ```typescript
-// ❌ Incorrect: document.location may be a form element, not Location — clobber bypass
-if (document.location.href.includes('trusted.com')) {
-  // bypassed when <form id="location"> clobbers document.location
+import { appConfig } from './app-config'
+
+declare global {
+  interface Window {
+    appConfig?: { cdnUrl: string }
+  }
 }
 
-// ✅ Correct: explicit window APIs; strip id/name from untrusted HTML
-const pageUrl = window.location.href
+// ❌ Incorrect: optional global — injected <a id="appConfig"> elements supply cdnUrl
+const widgetScript = document.createElement('script')
+widgetScript.src = `${window.appConfig?.cdnUrl ?? '/static'}/widget.js`
+document.body.append(widgetScript)
+
+// ✅ Correct: config from a module; instanceof check on the DOM lookup; strip id/name from untrusted HTML
+const widgetScript = document.createElement('script')
+widgetScript.src = `${appConfig.cdnUrl}/widget.js`
+document.body.append(widgetScript)
+
+const configElement = document.getElementById('server-config')
+
+if (!(configElement instanceof HTMLScriptElement)) {
+  throw new Error('server config missing')
+}
+
+const serverConfig: unknown = JSON.parse(configElement.textContent ?? '{}')
 
 export function sanitizeClobberableHtml(unsafeHtml: string) {
   const parsedDocument = new DOMParser().parseFromString(
@@ -34,7 +56,7 @@ export function sanitizeClobberableHtml(unsafeHtml: string) {
 
 ## Strip id and name
 
-Leftover `id`/`name` on inserted HTML still clobbers `document` even when
-lookups use `window`.
+Removing `id` and `name` from untrusted HTML takes away the attributes that
+create named properties, so it also covers reads you have not found yet.
 
 - Strip `id` and `name` from HTML that was not authored by the app.

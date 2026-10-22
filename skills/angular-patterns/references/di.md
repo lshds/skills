@@ -73,7 +73,7 @@ export const appConfig: ApplicationConfig = {
       provide: Logger,
       useClass: environment.production ? RemoteLogger : ConsoleLogger,
     },
-    { provide: AbstractLogger, useExisting: ConsoleLogger },
+    { provide: AbstractLogger, useExisting: Logger },
   ],
 }
 ```

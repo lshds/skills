@@ -61,6 +61,11 @@ export default async function TeamSlot() {
 
   return <TeamList teamMembers={teamMembers} />
 }
+
+// app/dashboard/@team/loading.tsx
+export default function TeamLoading() {
+  return <TeamListSkeleton />
+}
 ```
 
 ## `default.tsx` for every slot

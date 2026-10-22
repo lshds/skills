@@ -35,7 +35,7 @@ routes under `src/app/`. Expo also supports top-level `app/` — follow the repo
 └── package.json
 ```
 
-- Default template aliases `@/*` and `~/*` → `./src/*`.
+- Default template aliases `@/*` → `./src/*` and `@/assets/*` → `./assets/*`.
 - `app.json`, `eas.json`, `package.json`, `assets/`, `scripts/` stay outside `src/`.
 - Ask before moving files when unsure whether the project is greenfield.
 

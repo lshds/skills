@@ -89,7 +89,7 @@ Deployable units go under a deployable root; shared libraries go under
 `packages/*`. One purpose per package. HTTP/backend belongs in `api/`.
 
 ```text
-// ❌ Incorrect: shared utils left under an app; mega-shared package; API under apps/
+// ❌ Incorrect: shared utils left under an app; mega-shared package; API under apps/ on a new layout
 apps/webapp/shared/utils.ts
 apps/api/
 packages/shared/
@@ -121,7 +121,7 @@ Match this repo’s names and aliases. Namespace internal packages
 shared code from `packages/*`, not from other apps.
 
 ```text
-// ❌ Incorrect: app imports another app; unnamespaced internal package
+// ❌ Incorrect: app imports another app; unnamespaced internal package on a new layout
 apps/webapp → import from apps/mobileapp
 packages/ui/package.json  { "name": "ui" }
 
@@ -163,7 +163,8 @@ packages/utils/src/formatDate.ts
 - New code → flat role folder under `src/*` in the owning app (match that
   app’s names — `hooks/`, `screens/`, `components/`, `services/` as present).
 - Shared library → existing or new `packages/*` (one purpose).
-- API / backend → `api/`; CLI → `bin/` when that root exists.
+- API / backend → `api/` (or the observed backend root); CLI → `bin/` when
+  that root exists.
 - Tests and config changes → same package as the code they cover.
 
 ## Common mistakes
@@ -172,7 +173,7 @@ Keep clients, libraries, and HTTP separate. Place against the observed tree;
 use top-level `api/` for backend on new layout.
 
 ```text
-// ❌ Incorrect: API under apps/; shared under an app; app→app import; nested packages
+// ❌ Incorrect: API under apps/ on a new layout; shared under an app; app→app import; nested packages
 apps/api/
 apps/webapp/shared/utils.ts
 apps/webapp → import from apps/mobileapp

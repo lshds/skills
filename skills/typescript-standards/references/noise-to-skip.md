@@ -32,7 +32,7 @@ notifyUser(user)
 
 `undefined` is already the default for uninitialized variables, omitted
 parameters, and bare `return`. Use optional chaining instead of
-`!== undefined` guards.
+`!== undefined` guards around property reads and calls.
 
 ```typescript
 // ❌ Incorrect: undefined written out where it is already the default

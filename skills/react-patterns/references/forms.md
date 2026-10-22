@@ -10,7 +10,7 @@ child of the `<form>`, and show instant feedback with `useOptimistic`.
 Match the repo’s form approach. When using controlled local state:
 
 ```tsx
-// ❌ Incorrect: no pending guard / validate only as fire-and-forget
+// ❌ Incorrect: no validation, pending guard, or failure handling — invalid values are saved and a double click submits twice
 const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
   event.preventDefault()
   await onSave(values)
@@ -381,4 +381,4 @@ export function CommentThread({ postId, comments }: CommentThreadProps) {
 - Prefer controlled inputs, or the repo’s form library and its schema validator when present (for example React Hook Form with Zod) — don’t invent a parallel validation style in one feature.
 - Guard double-submit with `isPending` (or equivalent); disable the submitting control while pending.
 - On recoverable save failure, keep `values` and set an error — don’t reset the form unless the flow requires it.
-- Uncontrolled + form library only when that is already the local pattern.
+- Outside Server Action forms, use uncontrolled inputs with a form library only when that is already the local pattern.

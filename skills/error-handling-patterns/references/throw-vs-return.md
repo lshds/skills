@@ -91,7 +91,7 @@ export async function archiveOrder(orderId: string): Promise<void> {
 ```
 
 - `try` / `finally` is the default — it works in every runtime and TypeScript version.
-- Use `using` (resource implements `Symbol.dispose`) or `await using` (`Symbol.asyncDispose`) only when the resource already implements it and the repo's TypeScript and runtime support it (TypeScript 5.2+ with `lib` `esnext.disposable` or an ES2025+ target). Don't wrap a resource just to use the syntax.
+- Use `using` (resource implements `Symbol.dispose`) or `await using` (`Symbol.asyncDispose`) only when the resource already implements it and the repo's TypeScript and runtime support it (TypeScript 5.2+ with `lib` `esnext.disposable` or an `esnext` target). Don't wrap a resource just to use the syntax.
 - Don't catch only to clean up and rethrow — `finally` releases without touching the error.
 - Keep cleanup from throwing: an exception inside `finally` replaces the original error.
 

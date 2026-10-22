@@ -119,7 +119,7 @@ is uncertain, ask. See [supply-chain.md](references/supply-chain.md).
 - **Docker:** digest-pinned base, minimal non-root runtime, BuildKit secret mounts, SBOM + provenance ([docker.md](references/docker.md))
 - **Misconfiguration:** CORS allowlist, security headers, nonce-based CSP, Trusted Types report-only first, no debug leaks ([misconfiguration.md](references/misconfiguration.md))
 - **Prototype pollution:** deep-merge skips `__proto__` / `constructor` / `prototype`; prefer null-prototype objects or `Map` ([prototype-pollution.md](references/prototype-pollution.md))
-- **DOM clobbering:** untrusted `id`/`name` shadow `document` APIs — use `window.*`, strip those attributes ([dom-clobbering.md](references/dom-clobbering.md))
+- **DOM clobbering:** untrusted `id`/`name` fill undeclared `window` globals and override `document` properties — don’t read undeclared globals, type-check DOM lookups, strip those attributes ([dom-clobbering.md](references/dom-clobbering.md))
 - **WebSocket:** origin allowlist, auth before actions, validated messages, no query-string tokens ([websocket.md](references/websocket.md))
 - **LLM prompt injection:** delimit untrusted content, never follow its instructions, validate output shape ([llm-prompt-injection.md](references/llm-prompt-injection.md))
 
@@ -143,7 +143,7 @@ is uncertain, ask. See [supply-chain.md](references/supply-chain.md).
 
 ## Output Format
 
-```markdown
+````markdown
 ## Security Review: [File/Component Name]
 
 ### Summary
@@ -169,7 +169,7 @@ is uncertain, ask. See [supply-chain.md](references/supply-chain.md).
 #### [VERIFY-001] [Potential Issue]
 - **Location**: `file.ts:456`
 - **Question**: [What needs to be verified]
-```
+````
 
 ## Practice areas
 

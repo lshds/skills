@@ -219,9 +219,12 @@ await db.insert(orders).values({
 })
 
 try {
-  const response = await request(app).get(`/orders/${orderId}`)
+  const response = await request(app)
+    .post('/orders')
+    .send({ id: orderId, amountCents: 100, customerId: 'cus_1' })
 
-  expect(response.status).toBe(200)
+  expect(response.status).toBe(409)
+  expect(response.body).toMatchObject({ code: 'order_already_exists' })
 } finally {
   await db.delete(orders).where(eq(orders.id, orderId))
 }

@@ -37,7 +37,7 @@ loginForm = new FormGroup({
 @Component({
   selector: 'app-login',
   imports: [FormField],
-  templateUrl: './login.html',
+  templateUrl: './login-page.html',
 })
 export class LoginPage {
   readonly loginModel = signal({
@@ -122,7 +122,7 @@ removeOrderItem(itemIndex: number) {
 </div>
 
 <!-- ✅ Correct: @for + [formField] on the field tree -->
-@for (orderItem of orderForm.items; track $index) {
+@for (orderItem of orderForm.items; track orderItem) {
   <input [formField]="orderItem.product" />
   <input type="number" [formField]="orderItem.quantity" />
   <button type="button" (click)="removeOrderItem($index)">Remove</button>
@@ -219,7 +219,7 @@ sync. A new `ControlValueAccessor` adds a provider and callback plumbing that
 Signal Forms doesn’t need.
 
 ```typescript
-import { Component, forwardRef, model, signal } from '@angular/core'
+import { Component, forwardRef, model, output, signal } from '@angular/core'
 import { NG_VALUE_ACCESSOR } from '@angular/forms'
 import type { ControlValueAccessor } from '@angular/forms'
 import type { FormValueControl } from '@angular/forms/signals'
@@ -279,14 +279,14 @@ export class ClearableInput implements ControlValueAccessor {
       #textInput
       [value]="value()"
       (input)="value.set(textInput.value)"
-      (blur)="touched.set(true)"
+      (blur)="touch.emit()"
     />
     <button type="button" (click)="value.set('')">Clear</button>
   `,
 })
 export class ClearableInput implements FormValueControl<string> {
   readonly value = model('')
-  readonly touched = model(false)
+  readonly touch = output<void>()
 }
 ```
 

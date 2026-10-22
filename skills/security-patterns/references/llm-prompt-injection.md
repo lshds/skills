@@ -44,7 +44,7 @@ export function validateLlmOutput(rawOutput: string) {
   return summary
 }
 
-export function summarizeDocument(documentContent: string) {
+export async function summarizeDocument(documentContent: string) {
   const prompt = `You are a document summarizer.
 
 RULES:
@@ -58,7 +58,7 @@ DOCUMENT END
 
 Provide a brief summary of the above document.`
 
-  return validateLlmOutput(llm.complete(prompt))
+  return validateLlmOutput(await llm.complete(prompt))
 }
 ```
 

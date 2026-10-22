@@ -9,7 +9,7 @@ depends on TypeScript 7.
 
 ## Config that compiles identically on TS 7
 
-TS 7 has the same type system as 6.0, so a config that builds cleanly on 6.0 with `stableTypeOrdering` and without `ignoreDeprecations` builds the same on 7. Deprecated options and implicit defaults are what break on the move.
+TS 7 has the same type system as 6.0, so a config that builds cleanly on 6.0 without `ignoreDeprecations` builds the same on 7, apart from rare type-ordering differences. Deprecated options are what break on the move.
 
 ```json
 // ❌ Incorrect: baseUrl, node resolution, and esModuleInterop off are deprecated in 6 and hard errors in 7 — ignoreDeprecations only hides them
@@ -26,7 +26,7 @@ TS 7 has the same type system as 6.0, so a config that builds cleanly on 6.0 wit
   "include": ["src"]
 }
 
-// ✅ Correct: no deprecated options; defaults that differ in 7 are stated explicitly
+// ✅ Correct: no deprecated options; the defaults 6.0 changed are stated explicitly
 {
   "compilerOptions": {
     "strict": true,
@@ -35,7 +35,6 @@ TS 7 has the same type system as 6.0, so a config that builds cleanly on 6.0 wit
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
     "noUncheckedSideEffectImports": true,
-    "stableTypeOrdering": true,
     "types": ["node"],
     "rootDir": "./src",
     "outDir": "./dist",
@@ -52,7 +51,7 @@ TS 7 has the same type system as 6.0, so a config that builds cleanly on 6.0 wit
 - `paths` entries start with `./` and resolve from the tsconfig's folder — no `baseUrl`.
 - `verbatimModuleSyntax` keeps imports as written, so a type imported without `import type` is a compile error instead of a runtime import.
 - `noUncheckedSideEffectImports` reports side-effect imports (`import './polyfills'`) that don't resolve.
-- `stableTypeOrdering` orders types the way 7 does (7 can't turn it off).
+- Leave `stableTypeOrdering` out of the baseline. It makes 6.0 order types the way 7 does, which helps while comparing 6 and 7 output or chasing an error that appears on only one of them, but it can slow type-checking by up to 25% — turn it on for that diagnosis, then remove it.
 
 ## Fix deprecations instead of silencing them
 
@@ -87,10 +86,10 @@ TS 6.0 reports each deprecated option as an error that `"ignoreDeprecations": "6
 
 ## Explicit `types` and `rootDir`
 
-TS 7 defaults `types` to `[]` and `rootDir` to `./`. A config that leans on the old defaults silently changes meaning: globals from `@types` packages (`process`, `Buffer`) disappear, and emitted files move from `dist/index.js` to `dist/src/index.js`.
+TS 6.0 and 7 default `types` to `[]` and `rootDir` to `./`. A config that leans on the old defaults silently changes meaning: globals from `@types` packages (`process`, `Buffer`) disappear, and emitted files move from `dist/index.js` to `dist/src/index.js`.
 
 ```json
-// ❌ Incorrect: implicit @types globals and an inferred rootDir — on TS 7 `process` is unknown and output lands in dist/src/
+// ❌ Incorrect: implicit @types globals and an inferred rootDir — on TS 6 and 7 `process` is unknown and output lands in dist/src/
 {
   "compilerOptions": {
     "outDir": "./dist"
@@ -179,7 +178,7 @@ class OrderService {
 
 Apply this section only when `package.json` already has `typescript@^7` or an alias to it (such as `"@typescript/native": "npm:typescript@^7.0.2"`). On a 6.0 repo, keep the baseline above. Moving a repo from 6 to 7 is a version change: never do it unasked and don't attach it to unrelated work — propose it when the user raises TypeScript 7 or upgrading.
 
-- **New defaults:** `strict: true`, `module: esnext`, `target` = latest stable ES, `noUncheckedSideEffectImports: true`, `libReplacement: false`, `stableTypeOrdering: true` (can't be disabled), `rootDir: ./`, `types: []`. Set them explicitly when the repo relied on the old values.
+- **Defaults:** the same as 6.0 — `strict: true`, `module: esnext`, `target` = latest stable ES, `noUncheckedSideEffectImports: true`, `libReplacement: false`, `rootDir: ./`, `types: []` — plus `stableTypeOrdering`, which is always on and can't be disabled. A repo coming from 5.x sets them explicitly when it relied on the old values.
 - **Hard errors (deprecated in 6):** `target: es5`, `downlevelIteration`, `moduleResolution: node` / `node10` / `classic`, `module: amd` / `umd` / `systemjs` / `none`, `baseUrl`, `esModuleInterop: false`, `allowSyntheticDefaultImports: false`, `alwaysStrict: false`, the `module` keyword for namespaces, import `assert { }`, and file paths passed to `tsc` while a tsconfig.json exists (needs `--ignoreConfig`). `ignoreDeprecations` can't silence them.
 - **JSDoc in `checkJs` repos:** no `@enum` special-casing, no Closure function syntax (`function(string): number`), no postfix `!` in JSDoc types, `@typedef` must name the type inside the tag, and values can't be used as types — write `typeof`.
 - **CLI:** `--checkers <n>` sets parallel type-check workers (default 4), `--builders <n>` sets parallel project builds with `--build`, `--singleThreaded` runs on one thread.

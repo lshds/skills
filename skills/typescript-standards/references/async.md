@@ -35,14 +35,16 @@ export async function GET() {
   return Response.json({ resource, config })
 }
 
-// ✅ Correct: auth + config start together; resource waits only on session
+// ✅ Correct: auth + config start together; resource chains off session, so a config rejection is never unhandled
 export async function GET() {
   const sessionPromise = auth()
   const configPromise = fetchConfig()
-  const session = await sessionPromise
+  const resourcePromise = sessionPromise.then((session) =>
+    fetchResource(session.user.id),
+  )
   const [config, resource] = await Promise.all([
     configPromise,
-    fetchResource(session.user.id),
+    resourcePromise,
   ])
 
   return Response.json({ resource, config })

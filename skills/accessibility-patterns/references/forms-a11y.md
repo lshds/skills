@@ -33,7 +33,8 @@ Put `role="alert"` on the form-level summary, not on each field message.
 <input id="email" type="email" />
 <span class="error">Invalid email address</span>
 
-<!-- ✅ Correct: describedby + invalid; alert is form-level (see Submit feedback) -->
+<!-- ✅ Correct: describedby + invalid; role="alert" goes on the form-level summary, not this message -->
+<label for="email">Email</label>
 <input
   id="email"
   type="email"

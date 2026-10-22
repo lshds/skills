@@ -36,7 +36,7 @@ function onUserCreated(data: string, cb: (data: string) => void) {
 
 // ✅ Correct: verb-noun; handle… local, on… callback param
 async function fetchUserById(userId: string) { }
-function isValidEmail(email: string): boolean { }
+function isValidEmail(email: string) { }
 function handleUserCreated(
   userId: string,
   onUserCreated: (userId: string) => void,

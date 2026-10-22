@@ -44,7 +44,7 @@ createApiReference('#app', {
 })
 ```
 
-- Do not add Scalar if the repo has no docs page yet, or if Redoc is already that page.
+- Do not add Scalar if the repo has no docs page yet (unless the user asked or confirmed), or if Redoc is already that page.
 - The spec at `url` uses kebab-case paths (`/api/v1/purchase-orders`) and camelCase `operationId` / JSON fields (`getPurchaseOrder`, `paidAt`). The path parameter matches the URL (`id`).
 - `sources[].slug` is kebab-case (`purchase-orders`), same as the path.
 - `sources` lists several specs on one page. Mark the one that opens first with `default: true`.

@@ -76,8 +76,8 @@ export default async function ProductPage({
 These follow the same load: the record behind the URL drives the output.
 
 - `generateStaticParams` lists the slugs to prerender at build time; the page
-  still awaits `params` and calls `notFound()` for a slug the list did not
-  include.
+  still awaits `params` and calls `notFound()` when the record is missing — a
+  slug the list did not include renders at request time.
 - A per-record Open Graph image comes from `openGraph.images` in
   `generateMetadata`, or from a sibling `opengraph-image.tsx` that awaits its
   `params` and loads the record by the same slug. One static image in the

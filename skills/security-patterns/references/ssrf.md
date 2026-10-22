@@ -52,7 +52,7 @@ if (typeof webhookUrl !== 'string') {
   throw new UnsafeUrlError('invalid url')
 }
 
-await fetch(assertSafeUrl(webhookUrl))
+await fetch(assertSafeUrl(webhookUrl), { redirect: 'error' })
 await fetch(`${process.env.INTERNAL_API_URL}/v1/health`) // server-controlled base — fine
 ```
 
@@ -66,12 +66,13 @@ Redirecting to an arbitrary external URL enables phishing and token theft via th
 // ❌ Incorrect: open redirect to attacker-controlled URL
 response.redirect(String(request.query.next))
 
-// ✅ Correct: relative path only; reject protocol-relative //evil.com
+// ✅ Correct: relative path only; reject //evil.com, /\evil.com, and tab/newline variants
 export function toSafeRedirect(nextPath: unknown) {
   if (
     typeof nextPath !== 'string' ||
     !nextPath.startsWith('/') ||
-    nextPath.startsWith('//')
+    nextPath.startsWith('//') ||
+    /[\\\t\n\r]/.test(nextPath)
   ) {
     return '/home'
   }

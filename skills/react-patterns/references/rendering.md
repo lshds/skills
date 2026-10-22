@@ -32,6 +32,6 @@ An undefined check plus a length comparison says the same thing twice.
 
 React Compiler already caches static JSX, so hoisting it to module scope “for
 performance” buys nothing and moves markup away from the component that
-renders it. Without the compiler it is still a pre-optimization the
-measure-first rule doesn’t allow. Keep markup next to the component unless the
+renders it. Without the compiler it is still a pre-optimization — optimize
+only after measuring a real cost. Keep markup next to the component unless the
 repo already extracts shared static nodes.

@@ -38,7 +38,7 @@ export function CardHeader({ children }: CardHeaderProps) {
 Use when parent and children must share state (tabs, disclosure, menu):
 
 ```tsx
-// ❌ Incorrect: mega-component with mutually exclusive props — hard to extend
+// ❌ Incorrect: mega-component configured through props — hard to extend
 interface TabsProps {
   tabs: string[]
   activeTab: string

@@ -5,7 +5,7 @@ not derived state you could compute during render.
 
 ## Rules
 
-Hooks must run at the top level in the same order every render — never after conditions or early returns.
+Hooks must run at the top level in the same order every render — never inside conditions or loops, or after an early return.
 
 ```tsx
 // ❌ Incorrect: hooks in conditions / after early return — breaks Rules of Hooks
@@ -77,7 +77,7 @@ Don’t hand-roll a general-purpose data-fetching hook when the repo already has
 Effects synchronize with external systems (DOM, subscriptions, non-React APIs). Don’t use them to derive renderable state.
 
 ```tsx
-// ❌ Incorrect: missing cleanup / object dep / derive in effect
+// ❌ Incorrect: missing cleanup / object dep
 useEffect(() => {
   const intervalId = setInterval(() => syncUser(user), 1000)
 }, [user])

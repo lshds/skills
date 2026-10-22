@@ -154,9 +154,11 @@ export async function fetchOrderIdsByStatus(
 
   const orderStatus = rawOrderStatus
 
-  return db.execute(sql`
+  const { rows } = await db.execute<{ id: number }>(sql`
     SELECT id FROM "order" WHERE status = ${orderStatus}
   `)
+
+  return rows
 }
 ```
 
@@ -250,7 +252,7 @@ export const postRelations = relations(post, ({ one }) => ({
 
 - Prisma: nest `select` on the relation field and bound the list with
   `take` —
-  `prisma.user.findMany({ take: LIST_PAGE_SIZE, select: { id: true, name: true, post: { select: { title: true } } } })`.
+  `prisma.user.findMany({ take: LIST_PAGE_SIZE, select: { id: true, name: true, post: { select: { title: true }, take: LIST_PAGE_SIZE } } })`.
 - Knex: one `leftJoin` with an explicit column list and `.limit()`, the same
   shape as the Drizzle join.
 

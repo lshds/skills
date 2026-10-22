@@ -93,7 +93,6 @@ export async function fetchUserById(
 /**
  * @param userId - Auth-session account id (`user_…`), not the display username
  * @returns The {@link User}, or `undefined` if none exists
- * @see {@link User}
  */
 export async function fetchUserById(
   userId: string,

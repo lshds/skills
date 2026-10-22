@@ -31,7 +31,8 @@ import Animated, {
 - Reanimated 4 requires `react-native-worklets` installed beside it — check
   both when adding or upgrading Reanimated.
 - Keep most UI motion under ~300ms; prefer springs for drag / settle.
-- Scroll-driven motion: `useScrollViewOffset` + `interpolate(..., 'clamp')`.
+- Scroll-driven motion: `useScrollOffset` (`useScrollViewOffset` before
+  Reanimated 4) + `interpolate(..., 'clamp')`.
 - Keyboard inset motion: `useAnimatedKeyboard` when animating with the keyboard.
 - Gate non-essential animation on reduced motion when available.
 - Haptics on meaningful commits only (and not on top of native controls that

@@ -159,24 +159,35 @@ export async function fetchTenantUsersWithOrders(tenantId: number) {
     return []
   }
 
-  const orderRows = await db
+  const rankedOrders = db
     .select({
       id: order.id,
       userId: order.userId,
       status: order.status,
+      rowNumber: sql<number>`row_number() over (
+        partition by ${order.userId} order by ${order.id}
+      )`.as('row_number'),
     })
     .from(order)
     .where(inArray(order.userId, userIds))
-    .orderBy(asc(order.id))
+    .as('ranked_orders')
+
+  const orderRows = await db
+    .select({
+      id: rankedOrders.id,
+      userId: rankedOrders.userId,
+      status: rankedOrders.status,
+    })
+    .from(rankedOrders)
+    .where(lte(rankedOrders.rowNumber, ORDERS_PER_USER))
+    .orderBy(asc(rankedOrders.id))
 
   const orderRowsByUserId = new Map<number, typeof orderRows>()
 
   for (const orderRow of orderRows) {
     const existingOrderRows = orderRowsByUserId.get(orderRow.userId) ?? []
 
-    if (existingOrderRows.length < ORDERS_PER_USER) {
-      orderRowsByUserId.set(orderRow.userId, [...existingOrderRows, orderRow])
-    }
+    orderRowsByUserId.set(orderRow.userId, [...existingOrderRows, orderRow])
   }
 
   return userRows.map((userRow) => ({
@@ -203,8 +214,10 @@ export async function fetchTenantUsersWithOrderRelations(tenantId: number) {
 }
 ```
 
-- A batched `IN` still needs a per-parent cap; Prisma `take` on the relation
-  does this in the query. Cap in memory only after a stable `orderBy`.
+- A batched `IN` still needs a per-parent cap in SQL (`row_number()` over a
+  stable `order by`). Prisma relation `take` caps per parent in SQL only with
+  the `relationJoins` preview feature; without it, Prisma fetches all children
+  of the page's parents and applies `take` in memory.
 
 ## Chunk large updates
 

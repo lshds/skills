@@ -108,11 +108,11 @@ Placement and frequency only (not schema libraries, rate limits, or response sha
 
 ### Error handling
 
-Don’t swallow failures on the request path — no empty `catch`, no logging and then answering as if it worked. The error taxonomy and how failures map to responses belong to error-handling design, not here.
+Don’t swallow failures on the request path — no empty `catch`, no logging and then answering as if it worked.
 
 ### Data access
 
-A spot-check on the request path; deeper query and transaction design belongs to the data-access layer.
+A spot-check of queries on the request path:
 
 - No query per row in a loop (N+1) — batch or join.
 - No unbounded list on the hot path — paginate or limit.

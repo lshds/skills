@@ -5,16 +5,15 @@ tags and removed RN modules break on native or fight platform look-and-feel.
 Match packages and APIs the project already uses; don’t migrate existing code
 for a newer Expo pattern. For **new** UI, you may suggest a modern option
 (e.g. `@expo/ui`, Reanimated, system blur) — state it as a choice and let the
-user decide; don’t apply it silently. Load `expo-ui` / `effects` references
-only when the task needs `@expo/ui`, motion, blur, glass, or gradients.
+user decide; don’t apply it silently.
 
 ## Library preferences
 
 Use maintained Expo / community packages the project already depends on — not
-removed RN core modules or parallel libs for the same job.
+deprecated RN core modules or parallel libs for the same job.
 
 ```tsx
-// ❌ Incorrect: removed RN SafeAreaView / DOM img / legacy expo-av
+// ❌ Incorrect: deprecated RN SafeAreaView / DOM img / legacy expo-av
 import { SafeAreaView, Image } from 'react-native'
 import { Audio } from 'expo-av'
 
@@ -182,7 +181,7 @@ import { File, Paths } from 'expo-file-system'
 
 const photoFile = new File(Paths.cache, 'shot.jpg')
 
-photoFile.write(base64Photo, { encoding: 'base64' })
+await photoFile.write(base64Photo, { encoding: 'base64' })
 await MediaLibrary.saveToLibraryAsync(photoFile.uri)
 ```
 

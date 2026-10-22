@@ -34,7 +34,7 @@ export function UserCard({ userId, onSelect }: UserCardProps) {
 ## Props
 
 - Prefer `interface` for props objects (`type` for unions / aliases only).
-- Avoid `React.FC` — it obscures the props type and implies `children`.
+- Avoid `React.FC` — it obscures the props type and forces a `const` arrow instead of `export function`.
 - Destructure props in the signature.
 - Callbacks: `on*` props; local handlers: `handle*`.
 - Pass a handler that takes no arguments (or just the event) directly — `onClick={handleSave}`, not `() => handleSave()`. Keep the arrow when the handler takes other arguments; passing it directly hands it the event instead.
@@ -203,8 +203,8 @@ export function Toast({
 ## Render nothing with `null`
 
 A bare `return` in a component reads like a forgotten branch. Return `null`
-when there is nothing to render — the TypeScript bare-`return` default does not
-apply to components.
+when there is nothing to render, even if plain functions in the codebase use a
+bare `return` for no value.
 
 ```tsx
 // ❌ Incorrect: bare return — looks like a missing branch, not an empty render
@@ -239,7 +239,7 @@ export function ErrorBanner({ message }: ErrorBannerProps) {
 Type `children` explicitly when the component accepts them:
 
 ```tsx
-// ❌ Incorrect: implicit children via React.FC — obscures the public API
+// ❌ Incorrect: children missing from the props type — React.FC stopped adding it in React 18 types, so this fails to type-check
 export const Panel: React.FC<{ title: string }> = ({ title, children }) => (
   <section>
     <h2>{title}</h2>

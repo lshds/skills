@@ -8,7 +8,7 @@ unused index only slows writes.
 An unindexed foreign key turns every join or cascading delete on that
 relationship into a full table scan. PostgreSQL never creates that index for
 you. MySQL InnoDB creates one if none exists — a later `CREATE INDEX` on the
-same column duplicates it.
+same column silently replaces it.
 
 ```sql
 -- ❌ Incorrect: FK column with no supporting index
@@ -19,8 +19,8 @@ CREATE TABLE "order" (
 
 -- ✅ Correct (PostgreSQL): FKs are not indexed automatically — add the index
 CREATE TABLE "order" (
-  id BIGINT PRIMARY KEY,
-  customer_id BIGINT NOT NULL REFERENCES customer (id)
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  customer_id BIGINT NOT NULL REFERENCES customer (id) ON DELETE RESTRICT
 );
 CREATE INDEX order_customer_id_idx ON "order" (customer_id);
 
@@ -29,7 +29,7 @@ CREATE TABLE `order` (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   customer_id BIGINT UNSIGNED NOT NULL,
   CONSTRAINT order_customer_fk
-    FOREIGN KEY (customer_id) REFERENCES customer (id),
+    FOREIGN KEY (customer_id) REFERENCES customer (id) ON DELETE RESTRICT,
   INDEX order_customer_id_idx (customer_id)
 );
 ```
@@ -73,9 +73,14 @@ every selected column is present in the index.
 CREATE INDEX order_customer_idx ON "order" (customer_id);
 SELECT customer_id, status FROM "order" WHERE customer_id = ?;
 
--- ✅ Correct: covering index includes every selected column
-CREATE INDEX order_customer_covering_idx ON "order" (customer_id, status);
+-- ✅ Correct (PostgreSQL): selected-only column in INCLUDE, key stays narrow
+CREATE INDEX order_customer_covering_idx ON "order" (customer_id)
+  INCLUDE (status);
 SELECT customer_id, status FROM "order" WHERE customer_id = ?;
+
+-- ✅ Correct (MySQL): no INCLUDE — the selected column joins the key
+CREATE INDEX order_customer_covering_idx ON `order` (customer_id, status);
+SELECT customer_id, status FROM `order` WHERE customer_id = ?;
 ```
 
 - Reach for a covering index on a high-frequency read path that selects few

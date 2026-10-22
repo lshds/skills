@@ -77,11 +77,11 @@ absolute `EXPO_PUBLIC_*` URLs.
 ```tsx
 // ❌ Incorrect: relative fetch / window.location / cookie session assumptions
 await fetch('/api/me')
-window.location.href = '/login'
+window.location.href = '/settings'
 
 // ✅ Correct: absolute API URL + expo-router
 await fetch(`${process.env.EXPO_PUBLIC_API_URL}/me`)
-router.replace('/login')
+router.push('/settings')
 ```
 
 | Web | Native |

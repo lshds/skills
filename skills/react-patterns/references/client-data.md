@@ -191,10 +191,10 @@ When you only observe scroll or touch and don’t call `preventDefault`, registe
 
 ```tsx
 // ❌ Incorrect: non-passive scroll/touch when you only observe — blocks scrolling
-document.addEventListener('touchstart', handleTouch)
-document.addEventListener('wheel', handleWheel)
+scrollContainer.addEventListener('touchstart', handleTouch)
+scrollContainer.addEventListener('wheel', handleWheel)
 
 // ✅ Correct: passive when you don’t call preventDefault — scroll stays smooth
-document.addEventListener('touchstart', handleTouch, { passive: true })
-document.addEventListener('wheel', handleWheel, { passive: true })
+scrollContainer.addEventListener('touchstart', handleTouch, { passive: true })
+scrollContainer.addEventListener('wheel', handleWheel, { passive: true })
 ```

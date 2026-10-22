@@ -121,7 +121,7 @@ CONTRACT Drop or ignore the source only after cutover.
 UPDATE "user" SET normalized_email = LOWER(email);
 
 -- ✅ Correct: PostgreSQL — one batch per statement; repeat until 0 rows
--- Drive the loop from the app/migrator; COMMIT cannot run inside DO $$ … END $$.
+-- Drive the loop from the app/migrator; DO $$ … END $$ cannot COMMIT inside a transaction.
 WITH batch AS (
   SELECT id
   FROM "user"
@@ -172,6 +172,7 @@ SELECT COUNT(*) FROM "user"
 WHERE last_login_at < NOW() - INTERVAL '1 year';
 
 -- After approval + backup, batch-delete (or DROP only in a later contract)
+-- MySQL rejects LIMIT in an IN subquery: DELETE … WHERE … ORDER BY id LIMIT 1000
 DELETE FROM "user"
 WHERE id IN (
   SELECT id FROM "user"

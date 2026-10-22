@@ -5,8 +5,8 @@ session before any write, and returning the status that matches the outcome
 over sync params and a blanket 403 or 200, so callers can tell signed-out,
 forbidden, missing, and created apart. Every failure goes through the repo's
 error envelope. The full status vocabulary, pagination, and envelope design
-belong to the HTTP contract surface; this file covers only the statuses that
-follow from the session and the lookup.
+are out of scope here; this file covers only the statuses that follow from the
+session and the lookup.
 
 ## Use the repo's error envelope
 
@@ -37,7 +37,7 @@ reads it as a plain object and gets `undefined`.
 
 - Type the second argument with the generated
   `RouteContext<'/api/products/[id]'>` and `await routeContext.params` before
-  the query, as every handler below does. A repo that hand-writes
+  the query, as the `GET` handlers below do. A repo that hand-writes
   `{ params: Promise<{ id: string }> }` keeps it until the user approves the
   migration.
 - Return 404 through the envelope when the row is missing — `200 null` hides

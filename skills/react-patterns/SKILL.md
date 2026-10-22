@@ -111,7 +111,7 @@ React implementation: controlled inputs or the repo’s form lib; `isPending` / 
 
 ### Error boundaries
 
-Route/feature islands with safe fallback; not for event/async errors. See [error-boundaries.md](references/error-boundaries.md).
+Route/feature islands with safe fallback. Boundaries miss event-handler and async-callback errors; Action errors and rejected `use()` promises do reach them. See [error-boundaries.md](references/error-boundaries.md).
 
 ### Server (RSC)
 
@@ -146,7 +146,7 @@ Read the reference for the task — don’t load every file.
 | Local UI / Context+reducer / shared state | [state.md](references/state.md) |
 | Client data / `use()` / Suspense / shared listeners | [client-data.md](references/client-data.md) |
 | React Compiler / `'use no memo'` / memo / `useMemo` / `useCallback` / stable defaults | [memoization.md](references/memoization.md) |
-| Conditional render (`&&` vs ternary) / optional lists `?.length` | [rendering.md](references/rendering.md) |
+| Conditional render (`&&` vs ternary) / optional lists `?.length` / hoisting static JSX | [rendering.md](references/rendering.md) |
 | Forms / controlled submit / `isPending` / `useActionState` / `useFormStatus` / `useOptimistic` | [forms.md](references/forms.md) |
 | Composition / children / compound components | [composition.md](references/composition.md) |
 | Error boundaries / feature islands / fallback | [error-boundaries.md](references/error-boundaries.md) |
